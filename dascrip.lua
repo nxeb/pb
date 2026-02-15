@@ -39,6 +39,7 @@ local Tabs = {
 	Movement = Window:AddTab("Movement", "move"),
 	Cheats = Window:AddTab("Cheats", "zap"),
 	Misc = Window:AddTab("Misc", "sparkles"),
+	["OVR Spoof"] = Window:AddTab("OVR Spoof", "award"),
 	Credits = Window:AddTab("Credits", "heart"),
 	["UI Settings"] = Window:AddTab("UI Settings", "settings"),
 }
@@ -202,22 +203,54 @@ local dribbleGamepad = {
 	[Enum.KeyCode.DPadDown] = Vector3.new(0, 0, 1),
 }
 
-local lastDribbleInput = {}
+-- Combo: side + down (or down + side) within 0.2s = behind the back → move to opposite side
+local DRIBBLE_COMBO_WINDOW = 0.2
+local lastDribbleSide = nil   -- "left" or "right"
+local lastDribbleBackTime = nil
+local lastDribbleSideTime = nil
+
+local function getDribbleInputType(keyCode)
+	if keyCode == Enum.KeyCode.X or keyCode == Enum.KeyCode.DPadDown then return "back" end
+	if keyCode == Enum.KeyCode.Z or keyCode == Enum.KeyCode.DPadLeft then return "left" end
+	if keyCode == Enum.KeyCode.C or keyCode == Enum.KeyCode.DPadRight then return "right" end
+	return nil
+end
+
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if gpe or Library.Unloaded then return end
-	local dir = dribbleKeys[input.KeyCode] or dribbleGamepad[input.KeyCode]
-	if dir then
-		local cam = workspace.CurrentCamera
-		if cam then
-			local lookVec = (cam.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit
-			local rightVec = (cam.CFrame.RightVector * Vector3.new(1, 0, 1)).Unit
-			local worldDir = (rightVec * dir.X + lookVec * -dir.Z)
-			if worldDir.Magnitude > 0.01 then
-				worldDir = worldDir.Unit
-			end
-			doDribble(worldDir)
+	local keyDir = dribbleKeys[input.KeyCode] or dribbleGamepad[input.KeyCode]
+	if not keyDir then return end
+
+	local inputType = getDribbleInputType(input.KeyCode)
+	local now = tick()
+	local cam = workspace.CurrentCamera
+	if not cam then return end
+
+	local lookVec = (cam.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit
+	local rightVec = (cam.CFrame.RightVector * Vector3.new(1, 0, 1)).Unit
+
+	local dir = keyDir
+	-- Behind-the-back: right+down or down+right within 0.2s → move left; left+down or down+left → move right
+	if inputType == "back" then
+		if lastDribbleSide and (now - (lastDribbleSideTime or 0)) <= DRIBBLE_COMBO_WINDOW then
+			-- down after side: move to opposite side
+			dir = lastDribbleSide == "right" and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
 		end
+		lastDribbleBackTime = now
+	elseif inputType == "left" or inputType == "right" then
+		if lastDribbleBackTime and (now - lastDribbleBackTime) <= DRIBBLE_COMBO_WINDOW then
+			-- side after down: move to opposite side
+			dir = inputType == "right" and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
+		end
+		lastDribbleSide = inputType
+		lastDribbleSideTime = now
 	end
+
+	local worldDir = (rightVec * dir.X + lookVec * -dir.Z)
+	if worldDir.Magnitude > 0.01 then
+		worldDir = worldDir.Unit
+	end
+	doDribble(worldDir)
 end)
 
 -- Cheats Tab
@@ -237,6 +270,26 @@ CheatsGroup:AddInput("UsernameSpoof", {
 	Tooltip = "Type a name to display (default: plugged)",
 })
 
+-- Find TopRight.TopRight.Username (path used by game: GetChildren()[8].TopRight.TopRight.Username)
+local function findTopRightUsername()
+	local gui = LocalPlayer.PlayerGui
+	local children = gui:GetChildren()
+	-- Try index 8 first (exact path user gave)
+	if children[8] then
+		local c = children[8]
+		if c:FindFirstChild("TopRight") and c.TopRight:FindFirstChild("TopRight") and c.TopRight.TopRight:FindFirstChild("Username") then
+			return c.TopRight.TopRight.Username
+		end
+	end
+	-- Fallback: scan all children for TopRight.TopRight.Username
+	for _, c in pairs(children) do
+		if c:FindFirstChild("TopRight") and c.TopRight:FindFirstChild("TopRight") and c.TopRight.TopRight:FindFirstChild("Username") then
+			return c.TopRight.TopRight.Username
+		end
+	end
+	return nil
+end
+
 CheatsGroup:AddButton({
 	Text = "Apply Username Spoof",
 	Func = function()
@@ -244,13 +297,8 @@ CheatsGroup:AddButton({
 		if name == "" then name = "plugged" end
 
 		pcall(function()
-			local main = LocalPlayer.PlayerGui:FindFirstChild("Main")
-			if main and main:FindFirstChild("TopRight") then
-				local tr = main.TopRight
-				if tr:FindFirstChild("TopRight") and tr.TopRight:FindFirstChild("Username") then
-					tr.TopRight.Username.Text = name
-				end
-			end
+			local un = findTopRightUsername()
+			if un then un.Text = name end
 		end)
 
 		-- Find player banner in LocalPlayer's character
@@ -272,6 +320,7 @@ CheatsGroup:AddButton({
 -- Silent Vision logic (track hold via InputBegan/InputEnded for reliable controller support)
 local silentVisionHolding = false
 local silentVisionInputConnections = {}
+local silentVisionBarPositionResetDone = false
 
 local function isShootInput(input)
 	return input.KeyCode == Enum.KeyCode.E or input.KeyCode == Enum.KeyCode.ButtonX or input.KeyCode == Enum.KeyCode.ButtonA
@@ -330,23 +379,22 @@ local function setupSilentVision()
 
 	if not Toggles.SilentVision.Value then
 		silentVisionHolding = false
+		silentVisionBarPositionResetDone = false
 		return
 	end
+
+	-- One-time: reset bar position so it doesn't start overlapping (prevents first shot auto-release)
+	silentVisionBarPositionResetDone = false
 
 	local lastBlockTime = 0
 	local lastHolding = false
 	silentVisionConnection = RunService.Heartbeat:Connect(function()
 		if Library.Unloaded or not Toggles.SilentVision.Value then return end
 
-		if not silentVisionHolding then
-			lastHolding = false
-			return
-		end
-
 		-- Find shot meter in LocalPlayer's character
 		local char = LocalPlayer.Character
 		if not char then return end
-		
+
 		local shotMeter = char:FindFirstChild("ShotMeterUI", true) -- recursive search
 		if not shotMeter or not shotMeter.Enabled then return end
 
@@ -354,8 +402,25 @@ local function setupSilentVision()
 		if not newMeter then return end
 
 		local greenWindow = newMeter:FindFirstChild("NewMeter")
-		local bar = newMeter:FindFirstChild("Bar")
+		-- Bar can be direct child or nested (e.g. inside a Frame)
+		local bar = newMeter:FindFirstChild("Bar") or newMeter:FindFirstChild("Bar", true) or shotMeter:FindFirstChild("Bar", true)
 		if not greenWindow or not bar then return end
+
+		-- Keep bar at safe position until user has held block (stops first-shot auto-release; game may overwrite each frame)
+		if not silentVisionHolding then
+			silentVisionBarPositionResetDone = false
+			pcall(function()
+				if bar:IsA("GuiObject") then
+					bar.Position = UDim2.new(0.5, 0, 0.996999979, 0)
+				end
+			end)
+			return
+		end
+		-- One-time skip of overlap check on first frame we're holding (layout may still be stale)
+		if not silentVisionBarPositionResetDone then
+			silentVisionBarPositionResetDone = true
+			return
+		end
 
 		local gwPos = greenWindow.AbsolutePosition
 		local gwSize = greenWindow.AbsoluteSize
@@ -397,11 +462,8 @@ MiscGroup:AddButton({
 		local name = Options.UsernameSpoof.Value
 		if name == "" then name = "plugged" end
 		pcall(function()
-			local main = LocalPlayer.PlayerGui:FindFirstChild("Main")
-			if main and main:FindFirstChild("TopRight") and main.TopRight:FindFirstChild("TopRight") then
-				local un = main.TopRight.TopRight:FindFirstChild("Username")
-				if un then un.Text = name end
-			end
+			local un = findTopRightUsername()
+			if un then un.Text = name end
 		end)
 		-- Find player banner in character
 		pcall(function()
@@ -465,6 +527,125 @@ UserInputService.JumpRequest:Connect(function()
 	end
 end)
 
+-- OVR Spoof Tab (local player character = Workspace "TheLocalCharacter" equivalent)
+-- Banner can be under character or in PlayerGui; search both and use recursive find
+local function findPlayerBanner()
+	local char = LocalPlayer.Character
+	if char then
+		local banner = char:FindFirstChild("PlayerBanner", true)
+		if banner then return banner end
+		-- Fallback: find by LegendRep; walk up to ancestor that contains OvrBackground (full banner)
+		local legendRep = char:FindFirstChild("LegendRep", true)
+		if legendRep then
+			local p = legendRep.Parent
+			while p and p ~= char do
+				if p:FindFirstChild("OvrBackground", true) then return p end
+				p = p.Parent
+			end
+			return legendRep.Parent
+		end
+		local rookieRep = char:FindFirstChild("RookieRep", true)
+		if rookieRep then return rookieRep.Parent end
+	end
+	for _, gui in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
+		if gui.Name == "PlayerBanner" then return gui end
+	end
+	local inWorkspace = workspace:FindFirstChild(LocalPlayer.Name)
+	if inWorkspace then
+		local banner = inWorkspace:FindFirstChild("PlayerBanner", true)
+		if banner then return banner end
+	end
+	return nil
+end
+
+local function applyOvrSpoof()
+	local banner = findPlayerBanner()
+	if not banner then return false end
+	return pcall(function()
+		local legendRep = banner:FindFirstChild("LegendRep") or (function()
+			for _, d in pairs(banner:GetDescendants()) do if d.Name == "LegendRep" then return d end end
+			return nil
+		end)()
+		local rookieRep = banner:FindFirstChild("RookieRep") or (function()
+			for _, d in pairs(banner:GetDescendants()) do if d.Name == "RookieRep" then return d end end
+			return nil
+		end)()
+		if legendRep and legendRep:IsA("GuiObject") then legendRep.Visible = true end
+		if rookieRep and rookieRep:IsA("GuiObject") then rookieRep.Visible = false end
+		local ovrBg = banner:FindFirstChild("OvrBackground") or (function()
+			for _, d in pairs(banner:GetDescendants()) do if d.Name == "OvrBackground" then return d end end
+			return nil
+		end)()
+		if ovrBg then
+			local ovrStroke = ovrBg:FindFirstChild("OvrStroke") or (function()
+				for _, d in pairs(ovrBg:GetDescendants()) do if d.Name == "OvrStroke" then return d end end
+				return nil
+			end)()
+			if ovrStroke then
+				local overall = ovrStroke:FindFirstChild("Overall") or (function()
+					for _, d in pairs(ovrStroke:GetDescendants()) do if d.Name == "Overall" then return d end end
+					return nil
+				end)()
+				if overall and (overall:IsA("TextLabel") or overall:IsA("TextBox")) then
+					overall.Text = "99"
+				end
+			end
+		end
+	end)
+end
+
+local OvrSpoofGroup = Tabs["OVR Spoof"]:AddLeftGroupbox("Overall Spoof")
+OvrSpoofGroup:AddToggle("OvrSpoofEnabled", {
+	Text = "OVR Spoof",
+	Default = false,
+	Tooltip = "Show LegendRep, hide RookieRep, set Overall to 99 on your banner",
+})
+
+-- Retry OVR spoof a few times when enabling (banner may load late)
+local function scheduleOvrSpoofRetries()
+	if not (Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value) then return end
+	for _, delay in pairs({0, 0.5, 1, 2}) do
+		task.delay(delay, function()
+			if Library.Unloaded or not (Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value) then return end
+			applyOvrSpoof()
+		end)
+	end
+end
+
+Toggles.OvrSpoofEnabled:OnChanged(function(enabled)
+	if enabled then
+		applyOvrSpoof()
+		scheduleOvrSpoofRetries()
+	end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+	if Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value then
+		task.defer(function()
+			applyOvrSpoof()
+			scheduleOvrSpoofRetries()
+		end)
+	end
+end)
+
+-- Keep OVR spoof applied (game may reset banner visibility/text)
+local ovrSpoofLoopConn = nil
+local function updateOvrSpoofLoop()
+	if ovrSpoofLoopConn then
+		ovrSpoofLoopConn:Disconnect()
+		ovrSpoofLoopConn = nil
+	end
+	if Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value then
+		ovrSpoofLoopConn = RunService.Heartbeat:Connect(function()
+			if Library.Unloaded or not (Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value) then return end
+			applyOvrSpoof()
+		end)
+	end
+end
+Toggles.OvrSpoofEnabled:OnChanged(function(enabled)
+	updateOvrSpoofLoop()
+end)
+
 -- Credits Tab
 local CreditsGroup = Tabs.Credits:AddLeftGroupbox("evilware Credits")
 
@@ -502,6 +683,7 @@ Library:OnUnload(function()
 	if l3FireConnection then l3FireConnection:Disconnect() end
 	if activeDribbleTween then activeDribbleTween:Cancel() end
 	if noclipConn then noclipConn:Disconnect() end
+	if ovrSpoofLoopConn then ovrSpoofLoopConn:Disconnect() end
 end)
 
 -- UI Settings
@@ -519,5 +701,6 @@ SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
 SaveManager:BuildConfigSection(Tabs["UI Settings"])
 ThemeManager:ApplyToTab(Tabs["UI Settings"])
 SaveManager:LoadAutoloadConfig()
+task.defer(updateOvrSpoofLoop) -- apply loop if OVR Spoof was loaded from config
 
 print("evilware loaded | 6vi1 / vamp")
