@@ -30,7 +30,7 @@ local silentVisionInputConnections = {}
 local Window = Library:CreateWindow({
 	Title = "evilware",
 	Footer = "version: 1.0 | 6vi1 / vamp",
-	Icon = 95816097006870,
+	Icon = nil,
 	NotifySide = "Right",
 	ShowCustomCursor = true,
 })
