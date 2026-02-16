@@ -1,14 +1,165 @@
 -- evilware by 6vi1 / vamp
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local IMAGE_ID = "109324425658652"
+local LOADING_MESSAGES = {
+	"Injecting...",
+	"Finding pointers...",
+	"Bypassing checks...",
+	"Loading modules...",
+	"Initializing hooks...",
+	"Scanning memory...",
+	"Establishing connection...",
+	"Decrypting assets...",
+	"Preparing environment...",
+	"Loading UI core...",
+	"Verifying integrity...",
+	"Almost there...",
+}
+
+local function runLoadingScreen()
+	local LocalPlayer = Players.LocalPlayer
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "EvilwareLoader"
+	gui.ResetOnSpawn = false
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+	local overlay = Instance.new("Frame")
+	overlay.Name = "Overlay"
+	overlay.Size = UDim2.new(1, 0, 1, 0)
+	overlay.Position = UDim2.new(0, 0, 0, 0)
+	overlay.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
+	overlay.BorderSizePixel = 0
+	overlay.Parent = gui
+
+	local container = Instance.new("Frame")
+	container.Name = "Container"
+	container.AnchorPoint = Vector2.new(0.5, 0.5)
+	container.Size = UDim2.new(0, 420, 0, 320)
+	container.Position = UDim2.new(0.5, 0, 0.5, 0)
+	container.BackgroundColor3 = Color3.fromRGB(14, 14, 22)
+	container.BorderSizePixel = 0
+	container.Parent = overlay
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 16)
+	corner.Parent = container
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(60, 45, 120)
+	stroke.Thickness = 1
+	stroke.Parent = container
+
+	local img = Instance.new("ImageLabel")
+	img.Name = "Logo"
+	img.Size = UDim2.new(0, 100, 0, 100)
+	img.Position = UDim2.new(0.5, -50, 0, 28)
+	img.BackgroundTransparency = 1
+	img.Image = "rbxassetid://" .. IMAGE_ID
+	img.ScaleType = Enum.ScaleType.Fit
+	img.Parent = container
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -40, 0, 32)
+	title.Position = UDim2.new(0, 20, 0, 138)
+	title.BackgroundTransparency = 1
+	title.Text = "evilware"
+	title.TextColor3 = Color3.fromRGB(220, 215, 255)
+	title.TextSize = 24
+	title.Font = Enum.Font.GothamBold
+	title.Parent = container
+
+	local status = Instance.new("TextLabel")
+	status.Name = "Status"
+	status.Size = UDim2.new(1, -40, 0, 22)
+	status.Position = UDim2.new(0, 20, 0, 178)
+	status.BackgroundTransparency = 1
+	status.Text = "Initializing..."
+	status.TextColor3 = Color3.fromRGB(140, 130, 180)
+	status.TextSize = 14
+	status.Font = Enum.Font.Gotham
+	status.Parent = container
+
+	local barBg = Instance.new("Frame")
+	barBg.Name = "BarBg"
+	barBg.Size = UDim2.new(1, -40, 0, 8)
+	barBg.Position = UDim2.new(0, 20, 0, 218)
+	barBg.BackgroundColor3 = Color3.fromRGB(28, 26, 42)
+	barBg.BorderSizePixel = 0
+	barBg.Parent = container
+	local barBgCorner = Instance.new("UICorner")
+	barBgCorner.CornerRadius = UDim.new(1, 0)
+	barBgCorner.Parent = barBg
+
+	local barFill = Instance.new("Frame")
+	barFill.Name = "BarFill"
+	barFill.Size = UDim2.new(0, 0, 1, 0)
+	barFill.Position = UDim2.new(0, 0, 0, 0)
+	barFill.AnchorPoint = Vector2.new(0, 0)
+	barFill.BackgroundColor3 = Color3.fromRGB(100, 70, 200)
+	barFill.BorderSizePixel = 0
+	barFill.Parent = barBg
+	local barFillCorner = Instance.new("UICorner")
+	barFillCorner.CornerRadius = UDim.new(1, 0)
+	barFillCorner.Parent = barFill
+
+	local circleOuter = Instance.new("Frame")
+	circleOuter.Name = "CircleOuter"
+	circleOuter.AnchorPoint = Vector2.new(0.5, 0.5)
+	circleOuter.Size = UDim2.new(0, 44, 0, 44)
+	circleOuter.Position = UDim2.new(0.5, -22, 0, 258)
+	circleOuter.BackgroundTransparency = 1
+	circleOuter.Parent = container
+	local circleStroke = Instance.new("UIStroke")
+	circleStroke.Color = Color3.fromRGB(50, 40, 90)
+	circleStroke.Thickness = 2
+	circleStroke.Parent = circleOuter
+
+	local duration = 10 + math.random() * 5
+	local startTime = tick()
+	local lastMsgTime = 0
+	local msgIndex = 1
+
+	local conn = RunService.RenderStepped:Connect(function()
+		local elapsed = tick() - startTime
+		local t = math.min(elapsed / duration, 1)
+		local smooth = 1 - (1 - t) ^ 1.6
+		barFill.Size = UDim2.new(smooth, 0, 1, 0)
+		if elapsed - lastMsgTime >= 0.9 then
+			lastMsgTime = elapsed
+			msgIndex = (msgIndex % #LOADING_MESSAGES) + 1
+			status.Text = LOADING_MESSAGES[msgIndex]
+		end
+		circleStroke.Color = Color3.fromRGB(50 + math.floor(80 * smooth), 40, 90 + math.floor(100 * smooth))
+		circleOuter.Rotation = (circleOuter.Rotation + 4) % 360
+	end)
+
+	task.wait(duration)
+	conn:Disconnect()
+	status.Text = "Ready."
+	barFill.Size = UDim2.new(1, 0, 1, 0)
+
+	task.wait(0.4)
+	TweenService:Create(container, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+		Size = UDim2.new(0, 0, 0, 0),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+	}):Play()
+	TweenService:Create(overlay, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
+	task.wait(0.55)
+	gui:Destroy()
+end
+
+runLoadingScreen()
+
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -30,7 +181,7 @@ local silentVisionInputConnections = {}
 local Window = Library:CreateWindow({
 	Title = "evilware",
 	Footer = "version: 1.0 | 6vi1 / vamp",
-	Icon = nil,
+	Icon = "rbxassetid://" .. IMAGE_ID,
 	NotifySide = "Right",
 	ShowCustomCursor = true,
 })
