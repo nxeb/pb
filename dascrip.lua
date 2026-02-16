@@ -566,12 +566,15 @@ local function applyOvrSpoof()
 			for _, d in pairs(banner:GetDescendants()) do if d.Name == "LegendRep" then return d end end
 			return nil
 		end)()
-		local rookieRep = banner:FindFirstChild("RookieRep") or (function()
-			for _, d in pairs(banner:GetDescendants()) do if d.Name == "RookieRep" then return d end end
-			return nil
-		end)()
+		local repNamesToHide = { "RookieRep", "ProRep", "SuperstarRep", "EliteRep" }
+		for _, name in pairs(repNamesToHide) do
+			local rep = banner:FindFirstChild(name) or (function()
+				for _, d in pairs(banner:GetDescendants()) do if d.Name == name then return d end end
+				return nil
+			end)()
+			if rep and rep:IsA("GuiObject") then rep.Visible = false end
+		end
 		if legendRep and legendRep:IsA("GuiObject") then legendRep.Visible = true end
-		if rookieRep and rookieRep:IsA("GuiObject") then rookieRep.Visible = false end
 		local ovrBg = banner:FindFirstChild("OvrBackground") or (function()
 			for _, d in pairs(banner:GetDescendants()) do if d.Name == "OvrBackground" then return d end end
 			return nil
@@ -598,7 +601,7 @@ local OvrSpoofGroup = Tabs["OVR Spoof"]:AddLeftGroupbox("Overall Spoof")
 OvrSpoofGroup:AddToggle("OvrSpoofEnabled", {
 	Text = "OVR Spoof",
 	Default = false,
-	Tooltip = "Show LegendRep, hide RookieRep, set Overall to 99 on your banner",
+	Tooltip = "Show LegendRep, hide Rookie/Pro/Superstar/Elite Rep, set Overall to 99",
 })
 
 -- Retry OVR spoof a few times when enabling (banner may load late)
