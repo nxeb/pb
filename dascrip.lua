@@ -4,6 +4,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
 
 local IMAGE_ID = "109324425658652"
 local LOADING_MESSAGES = {
@@ -23,11 +24,28 @@ local LOADING_MESSAGES = {
 
 local function runLoadingScreen()
 	local LocalPlayer = Players.LocalPlayer
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+	-- Disable all CoreGui while loading
+	for _, coreType in pairs(Enum.CoreGuiType:GetEnumItems()) do
+		pcall(function() StarterGui:SetCoreGuiEnabled(coreType, false) end)
+	end
+
+	-- Disable all other ScreenGuis in PlayerGui (we'll add ours then hide the rest)
+	local otherGuis = {}
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "EvilwareLoader"
 	gui.ResetOnSpawn = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	gui.IgnoreGuiInset = true
+	gui.Parent = playerGui
+
+	for _, child in pairs(playerGui:GetChildren()) do
+		if child ~= gui and child:IsA("ScreenGui") and child.Enabled then
+			child.Enabled = false
+			table.insert(otherGuis, child)
+		end
+	end
 
 	local overlay = Instance.new("Frame")
 	overlay.Name = "Overlay"
@@ -152,6 +170,16 @@ local function runLoadingScreen()
 	TweenService:Create(overlay, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
 	task.wait(0.55)
 	gui:Destroy()
+
+	-- Re-enable all CoreGui
+	for _, coreType in pairs(Enum.CoreGuiType:GetEnumItems()) do
+		pcall(function() StarterGui:SetCoreGuiEnabled(coreType, true) end)
+	end
+
+	-- Re-enable other PlayerGui ScreenGuis
+	for _, other in pairs(otherGuis) do
+		if other.Parent then other.Enabled = true end
+	end
 end
 
 runLoadingScreen()
