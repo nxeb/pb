@@ -6,7 +6,7 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
-local IMAGE_ID = "109324425658652"
+local IMAGE_ID = "138398129441202"
 local LOADING_MESSAGES = {
 	"Injecting...",
 	"Finding pointers...",
@@ -205,11 +205,18 @@ local walkspeedLoopConnection = nil
 local dribbleDistance = 15
 local silentVisionConnection = nil
 local silentVisionInputConnections = {}
+-- Desync
+local desyncActive = false
+local desyncGhostModel = nil
+local desyncHeartbeatConnection = nil
+-- Guard speed
+local guardSpeedHolding = false
+local guardSpeedConnection = nil
 
 local Window = Library:CreateWindow({
 	Title = "evilware",
 	Footer = "version: 1.0 | 6vi1 / vamp",
-	Icon = "rbxassetid://" .. IMAGE_ID,
+	Icon = 138398129441202,
 	NotifySide = "Right",
 	ShowCustomCursor = true,
 })
@@ -279,11 +286,31 @@ MovementGroup:AddSlider("DribbleDuration", {
 	Tooltip = "How long the movement takes (smoother = higher)",
 })
 
+MovementGroup:AddDivider()
+
+MovementGroup:AddToggle("GuardSpeedEnabled", {
+	Text = "Guard Speed",
+	Default = false,
+	Tooltip = "While holding F (keyboard) or L2 (controller), move at the set speed.",
+})
+
+MovementGroup:AddSlider("GuardSpeed", {
+	Text = "Guard Speed",
+	Default = 24,
+	Min = 1,
+	Max = 200,
+	Rounding = 1,
+	Suffix = " studs/s",
+})
+
 -- Walkspeed Loop - use RenderStepped (runs last) so we override game's WalkSpeed, and hook PropertyChanged to force it
 local walkspeedPropertyConnections = {}
 
 local function applyWalkspeed(humanoid)
-	if humanoid and Toggles.WalkspeedEnabled.Value then
+	if not humanoid then return end
+	if guardSpeedHolding and Toggles.GuardSpeedEnabled.Value then
+		humanoid.WalkSpeed = Options.GuardSpeed.Value
+	elseif Toggles.WalkspeedEnabled.Value then
 		humanoid.WalkSpeed = Options.Walkspeed.Value
 	end
 end
@@ -302,10 +329,27 @@ local function setupWalkspeedHook(char)
 	end
 end
 
+local function startMovementSpeedLoop()
+	if walkspeedLoopConnection then walkspeedLoopConnection:Disconnect() end
+	walkspeedLoopConnection = RunService.RenderStepped:Connect(function()
+		if Library.Unloaded then return end
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChild("Humanoid")
+		if not hum then return end
+		if guardSpeedHolding and Toggles.GuardSpeedEnabled.Value then
+			hum.WalkSpeed = Options.GuardSpeed.Value
+		elseif Toggles.WalkspeedEnabled.Value then
+			hum.WalkSpeed = Options.Walkspeed.Value
+		end
+	end)
+end
+
 Toggles.WalkspeedEnabled:OnChanged(function(enabled)
-	if walkspeedLoopConnection then
-		walkspeedLoopConnection:Disconnect()
-		walkspeedLoopConnection = nil
+	if not enabled and not Toggles.GuardSpeedEnabled.Value then
+		if walkspeedLoopConnection then
+			walkspeedLoopConnection:Disconnect()
+			walkspeedLoopConnection = nil
+		end
 	end
 	for _, c in pairs(walkspeedPropertyConnections) do c:Disconnect() end
 	walkspeedPropertyConnections = {}
@@ -313,15 +357,25 @@ Toggles.WalkspeedEnabled:OnChanged(function(enabled)
 	if enabled then
 		local char = LocalPlayer.Character
 		if char then setupWalkspeedHook(char) end
+		startMovementSpeedLoop()
+	end
+end)
 
-		walkspeedLoopConnection = RunService.RenderStepped:Connect(function()
-			if Library.Unloaded then return end
-			local char = LocalPlayer.Character
-			local hum = char and char:FindFirstChild("Humanoid")
-			if hum and hum.WalkSpeed ~= Options.Walkspeed.Value then
-				hum.WalkSpeed = Options.Walkspeed.Value
-			end
-		end)
+Toggles.GuardSpeedEnabled:OnChanged(function(enabled)
+	if not enabled then guardSpeedHolding = false end
+	if enabled then
+		startMovementSpeedLoop()
+	elseif not Toggles.WalkspeedEnabled.Value then
+		if walkspeedLoopConnection then
+			walkspeedLoopConnection:Disconnect()
+			walkspeedLoopConnection = nil
+		end
+	end
+end)
+
+Options.GuardSpeed:OnChanged(function()
+	if guardSpeedHolding and Toggles.GuardSpeedEnabled.Value then
+		applyWalkspeed(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid"))
 	end
 end)
 
@@ -432,8 +486,28 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	doDribble(worldDir)
 end)
 
+-- Guard speed: hold F or L2 to run at GuardSpeed
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if gpe or Library.Unloaded then return end
+	if not Toggles.GuardSpeedEnabled.Value then return end
+	if input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonL2 then
+		guardSpeedHolding = true
+	end
+end)
+UserInputService.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonL2 then
+		guardSpeedHolding = false
+	end
+end)
+
 -- Cheats Tab
 local CheatsGroup = Tabs.Cheats:AddLeftGroupbox("Cheats")
+
+CheatsGroup:AddToggle("DesyncEnabled", {
+	Text = "Desync",
+	Default = false,
+	Tooltip = "Enable desync. Turn on then use keybind to toggle desync on/off.",
+}):AddKeyPicker("DesyncKeybind", { Default = "G", NoUI = false, Text = "Desync toggle" })
 
 CheatsGroup:AddToggle("SilentVision", {
 	Text = "Silent Vision (V1)",
@@ -623,6 +697,120 @@ local function setupSilentVision()
 end
 
 Toggles.SilentVision:OnChanged(setupSilentVision)
+
+-- Desync: only active when toggle on and keybind toggles state
+local function clearUnwantedScriptsDesync(character)
+	for _, v in pairs(character:GetChildren()) do
+		if v:IsA("Script") and v.Name ~= "Health" and v.Name ~= "Sound" and v:FindFirstChild("LocalScript") then
+			v:Destroy()
+		end
+	end
+end
+
+local function createDesyncGhost(character)
+	if desyncGhostModel then desyncGhostModel:Destroy() end
+	if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+	local clone = character:Clone()
+	if not clone then return end
+	clone.Name = "DesyncGhost"
+	for _, part in pairs(clone:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = false
+			part.Transparency = 0.7
+			part.CastShadow = false
+		elseif part:IsA("Decal") or part:IsA("Texture") then
+			part.Transparency = 0.7
+		end
+	end
+	for _, v in pairs(clone:GetChildren()) do
+		if v:IsA("Script") or v:IsA("LocalScript") or v:IsA("ModuleScript") then v:Destroy() end
+	end
+	if clone:FindFirstChild("Humanoid") then clone.Humanoid:Destroy() end
+	local highlight = Instance.new("Highlight")
+	highlight.FillColor = Color3.fromRGB(100, 150, 255)
+	highlight.FillTransparency = 0.5
+	highlight.OutlineColor = Color3.fromRGB(150, 200, 255)
+	highlight.OutlineTransparency = 0
+	highlight.Parent = clone
+	clone.Parent = workspace
+	desyncGhostModel = clone
+end
+
+local function updateDesyncGhost(character)
+	if not desyncGhostModel or not character then return end
+	for _, part in pairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			local ghostPart = desyncGhostModel:FindFirstChild(part.Name, true)
+			if ghostPart and ghostPart:IsA("BasePart") then
+				ghostPart.CFrame = part.CFrame
+				ghostPart.Size = part.Size
+			end
+		end
+	end
+end
+
+local function getDesyncKeyCode()
+	local v = Options.DesyncKeybind and Options.DesyncKeybind.Value
+	if type(v) == "table" and v.KeyCode then return v.KeyCode end
+	if type(v) == "string" then return Enum.KeyCode[v] end
+	return v
+end
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if gpe or Library.Unloaded then return end
+	if not Toggles.DesyncEnabled.Value then return end
+	local kc = getDesyncKeyCode()
+	if kc and input.KeyCode == kc then
+		desyncActive = not desyncActive
+		Library:Notify("Desync " .. (desyncActive and "On" or "Off"))
+	end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+	if desyncGhostModel then desyncGhostModel:Destroy() desyncGhostModel = nil end
+	repeat task.wait() until char
+	clearUnwantedScriptsDesync(char)
+	if Toggles.DesyncEnabled.Value and desyncActive then createDesyncGhost(char) end
+	char.ChildAdded:Connect(function(child)
+		if child:IsA("Script") and child:FindFirstChild("LocalScript") then
+			task.wait(0.25)
+			child.LocalScript:FireServer()
+		end
+	end)
+end)
+
+local function setupDesyncLoop()
+	if desyncHeartbeatConnection then
+		desyncHeartbeatConnection:Disconnect()
+		desyncHeartbeatConnection = nil
+	end
+	if not Toggles.DesyncEnabled.Value then
+		if desyncGhostModel then desyncGhostModel:Destroy() desyncGhostModel = nil end
+		desyncActive = false
+		return
+	end
+	desyncHeartbeatConnection = RunService.Heartbeat:Connect(function()
+		local char = LocalPlayer.Character
+		if not Toggles.DesyncEnabled.Value then return end
+		if desyncActive then
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				if not desyncGhostModel or not desyncGhostModel.Parent then createDesyncGhost(char) end
+				updateDesyncGhost(char)
+				local currentVelocity = hrp.Velocity
+				hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(0.0001), 0)
+				hrp.AssemblyLinearVelocity = Vector3.new(math.random(2000, 4000), math.random(2000, 4000), math.random(2000, 4000))
+				RunService.RenderStepped:Wait()
+				hrp.Velocity = currentVelocity
+			end
+		else
+			if desyncGhostModel then desyncGhostModel:Destroy() desyncGhostModel = nil end
+		end
+	end)
+end
+
+Toggles.DesyncEnabled:OnChanged(setupDesyncLoop)
+setupDesyncLoop()
 
 -- Misc Tab
 local MiscGroup = Tabs.Misc:AddLeftGroupbox("Misc Actions")
