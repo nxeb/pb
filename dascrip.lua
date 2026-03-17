@@ -6,12 +6,16 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
-local IMAGE_ID = "138398129441202"
+local IMAGE_ID = "109324425658652"
 local LOADING_MESSAGES = {
 	"Injecting...",
 	"Finding pointers...",
 	"Bypassing checks...",
 	"Loading modules...",
+	"Ratting your pc..."
+	"retard stop cheating..."
+	"we love cheating..."
+	"almost done kid..."
 	"Initializing hooks...",
 	"Scanning memory...",
 	"Establishing connection...",
@@ -86,7 +90,7 @@ local function runLoadingScreen()
 	title.Size = UDim2.new(1, -40, 0, 32)
 	title.Position = UDim2.new(0, 20, 0, 138)
 	title.BackgroundTransparency = 1
-	title.Text = "evilware"
+	title.Text = "onyx / evilware"
 	title.TextColor3 = Color3.fromRGB(220, 215, 255)
 	title.TextSize = 24
 	title.Font = Enum.Font.GothamBold
