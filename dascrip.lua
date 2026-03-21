@@ -40,9 +40,9 @@ local guardSpeedHolding = false
 
 -- Window
 local Window = Library:CreateWindow({
-	Title = "evilware",
-	Footer = "version: 1.0 | 6vi1 / vamp",
-	Icon = 138398129441202,
+	Title = "vampware",
+	Footer = "version: 2.0 | 6vi1 / vamp",
+	Icon = nil,
 	NotifySide = "Right",
 	ShowCustomCursor = true,
 })
