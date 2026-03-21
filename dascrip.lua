@@ -1,192 +1,10 @@
 -- evilware by 6vi1 / vamp
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
-
-local IMAGE_ID = "109324425658652"
-local LOADING_MESSAGES = {
-	"Injecting...",
-	"Finding pointers...",
-	"Bypassing checks...",
-	"Loading modules...",
-	"Ratting your pc..."
-	"retard stop cheating..."
-	"we love cheating..."
-	"almost done kid..."
-	"Initializing hooks...",
-	"Scanning memory...",
-	"Establishing connection...",
-	"Decrypting assets...",
-	"Preparing environment...",
-	"Loading UI core...",
-	"Verifying integrity...",
-	"Almost there...",
-}
-
-local function runLoadingScreen()
-	local LocalPlayer = Players.LocalPlayer
-	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-
-	-- Disable all CoreGui while loading
-	for _, coreType in pairs(Enum.CoreGuiType:GetEnumItems()) do
-		pcall(function() StarterGui:SetCoreGuiEnabled(coreType, false) end)
-	end
-
-	-- Disable all other ScreenGuis in PlayerGui (we'll add ours then hide the rest)
-	local otherGuis = {}
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "EvilwareLoader"
-	gui.ResetOnSpawn = false
-	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	gui.IgnoreGuiInset = true
-	gui.Parent = playerGui
-
-	for _, child in pairs(playerGui:GetChildren()) do
-		if child ~= gui and child:IsA("ScreenGui") and child.Enabled then
-			child.Enabled = false
-			table.insert(otherGuis, child)
-		end
-	end
-
-	local overlay = Instance.new("Frame")
-	overlay.Name = "Overlay"
-	overlay.Size = UDim2.new(1, 0, 1, 0)
-	overlay.Position = UDim2.new(0, 0, 0, 0)
-	overlay.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
-	overlay.BorderSizePixel = 0
-	overlay.Parent = gui
-
-	local container = Instance.new("Frame")
-	container.Name = "Container"
-	container.AnchorPoint = Vector2.new(0.5, 0.5)
-	container.Size = UDim2.new(0, 420, 0, 320)
-	container.Position = UDim2.new(0.5, 0, 0.5, 0)
-	container.BackgroundColor3 = Color3.fromRGB(14, 14, 22)
-	container.BorderSizePixel = 0
-	container.Parent = overlay
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 16)
-	corner.Parent = container
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(60, 45, 120)
-	stroke.Thickness = 1
-	stroke.Parent = container
-
-	local img = Instance.new("ImageLabel")
-	img.Name = "Logo"
-	img.Size = UDim2.new(0, 100, 0, 100)
-	img.Position = UDim2.new(0.5, -50, 0, 28)
-	img.BackgroundTransparency = 1
-	img.Image = "rbxassetid://" .. IMAGE_ID
-	img.ScaleType = Enum.ScaleType.Fit
-	img.Parent = container
-
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -40, 0, 32)
-	title.Position = UDim2.new(0, 20, 0, 138)
-	title.BackgroundTransparency = 1
-	title.Text = "onyx / evilware"
-	title.TextColor3 = Color3.fromRGB(220, 215, 255)
-	title.TextSize = 24
-	title.Font = Enum.Font.GothamBold
-	title.Parent = container
-
-	local status = Instance.new("TextLabel")
-	status.Name = "Status"
-	status.Size = UDim2.new(1, -40, 0, 22)
-	status.Position = UDim2.new(0, 20, 0, 178)
-	status.BackgroundTransparency = 1
-	status.Text = "Initializing..."
-	status.TextColor3 = Color3.fromRGB(140, 130, 180)
-	status.TextSize = 14
-	status.Font = Enum.Font.Gotham
-	status.Parent = container
-
-	local barBg = Instance.new("Frame")
-	barBg.Name = "BarBg"
-	barBg.Size = UDim2.new(1, -40, 0, 8)
-	barBg.Position = UDim2.new(0, 20, 0, 218)
-	barBg.BackgroundColor3 = Color3.fromRGB(28, 26, 42)
-	barBg.BorderSizePixel = 0
-	barBg.Parent = container
-	local barBgCorner = Instance.new("UICorner")
-	barBgCorner.CornerRadius = UDim.new(1, 0)
-	barBgCorner.Parent = barBg
-
-	local barFill = Instance.new("Frame")
-	barFill.Name = "BarFill"
-	barFill.Size = UDim2.new(0, 0, 1, 0)
-	barFill.Position = UDim2.new(0, 0, 0, 0)
-	barFill.AnchorPoint = Vector2.new(0, 0)
-	barFill.BackgroundColor3 = Color3.fromRGB(100, 70, 200)
-	barFill.BorderSizePixel = 0
-	barFill.Parent = barBg
-	local barFillCorner = Instance.new("UICorner")
-	barFillCorner.CornerRadius = UDim.new(1, 0)
-	barFillCorner.Parent = barFill
-
-	local circleOuter = Instance.new("Frame")
-	circleOuter.Name = "CircleOuter"
-	circleOuter.AnchorPoint = Vector2.new(0.5, 0.5)
-	circleOuter.Size = UDim2.new(0, 44, 0, 44)
-	circleOuter.Position = UDim2.new(0.5, -22, 0, 258)
-	circleOuter.BackgroundTransparency = 1
-	circleOuter.Parent = container
-	local circleStroke = Instance.new("UIStroke")
-	circleStroke.Color = Color3.fromRGB(50, 40, 90)
-	circleStroke.Thickness = 2
-	circleStroke.Parent = circleOuter
-
-	local duration = 10 + math.random() * 5
-	local startTime = tick()
-	local lastMsgTime = 0
-	local msgIndex = 1
-
-	local conn = RunService.RenderStepped:Connect(function()
-		local elapsed = tick() - startTime
-		local t = math.min(elapsed / duration, 1)
-		local smooth = 1 - (1 - t) ^ 1.6
-		barFill.Size = UDim2.new(smooth, 0, 1, 0)
-		if elapsed - lastMsgTime >= 0.9 then
-			lastMsgTime = elapsed
-			msgIndex = (msgIndex % #LOADING_MESSAGES) + 1
-			status.Text = LOADING_MESSAGES[msgIndex]
-		end
-		circleStroke.Color = Color3.fromRGB(50 + math.floor(80 * smooth), 40, 90 + math.floor(100 * smooth))
-		circleOuter.Rotation = (circleOuter.Rotation + 4) % 360
-	end)
-
-	task.wait(duration)
-	conn:Disconnect()
-	status.Text = "Ready."
-	barFill.Size = UDim2.new(1, 0, 1, 0)
-
-	task.wait(0.4)
-	TweenService:Create(container, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-		Size = UDim2.new(0, 0, 0, 0),
-		Position = UDim2.new(0.5, 0, 0.5, 0),
-	}):Play()
-	TweenService:Create(overlay, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
-	task.wait(0.55)
-	gui:Destroy()
-
-	-- Re-enable all CoreGui
-	for _, coreType in pairs(Enum.CoreGuiType:GetEnumItems()) do
-		pcall(function() StarterGui:SetCoreGuiEnabled(coreType, true) end)
-	end
-
-	-- Re-enable other PlayerGui ScreenGuis
-	for _, other in pairs(otherGuis) do
-		if other.Parent then other.Enabled = true end
-	end
-end
-
-runLoadingScreen()
 
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
@@ -206,17 +24,21 @@ Library.ShowToggleFrameInKeybinds = true
 
 -- State
 local walkspeedLoopConnection = nil
-local dribbleDistance = 15
+local walkspeedPropertyConnections = {}
 local silentVisionConnection = nil
 local silentVisionInputConnections = {}
--- Desync
+local silentVisionHolding = false
+local silentVisionBarPositionResetDone = false
+local activeDribbleTween = nil
+local noclipConn = nil
+local ovrSpoofLoopConn = nil
+local l3FireConnection = nil
 local desyncActive = false
 local desyncGhostModel = nil
 local desyncHeartbeatConnection = nil
--- Guard speed
 local guardSpeedHolding = false
-local guardSpeedConnection = nil
 
+-- Window
 local Window = Library:CreateWindow({
 	Title = "evilware",
 	Footer = "version: 1.0 | 6vi1 / vamp",
@@ -234,7 +56,10 @@ local Tabs = {
 	["UI Settings"] = Window:AddTab("UI Settings", "settings"),
 }
 
--- Movement Tab
+-- ============================
+-- MOVEMENT TAB
+-- ============================
+
 local MovementGroup = Tabs.Movement:AddLeftGroupbox("Movement")
 
 MovementGroup:AddToggle("WalkspeedEnabled", {
@@ -307,8 +132,9 @@ MovementGroup:AddSlider("GuardSpeed", {
 	Suffix = " studs/s",
 })
 
--- Walkspeed Loop - use RenderStepped (runs last) so we override game's WalkSpeed, and hook PropertyChanged to force it
-local walkspeedPropertyConnections = {}
+-- ============================
+-- WALKSPEED LOGIC
+-- ============================
 
 local function applyWalkspeed(humanoid)
 	if not humanoid then return end
@@ -320,17 +146,16 @@ local function applyWalkspeed(humanoid)
 end
 
 local function setupWalkspeedHook(char)
-	for _, c in pairs(walkspeedPropertyConnections) do c:Disconnect() end
+	for _, c in ipairs(walkspeedPropertyConnections) do c:Disconnect() end
 	walkspeedPropertyConnections = {}
 	local hum = char:FindFirstChild("Humanoid")
-	if hum then
-		table.insert(walkspeedPropertyConnections, hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-			if Toggles.WalkspeedEnabled.Value and hum.WalkSpeed ~= Options.Walkspeed.Value then
-				hum.WalkSpeed = Options.Walkspeed.Value
-			end
-		end))
-		applyWalkspeed(hum)
-	end
+	if not hum then return end
+	table.insert(walkspeedPropertyConnections, hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+		if Toggles.WalkspeedEnabled.Value and hum.WalkSpeed ~= Options.Walkspeed.Value then
+			hum.WalkSpeed = Options.Walkspeed.Value
+		end
+	end))
+	applyWalkspeed(hum)
 end
 
 local function startMovementSpeedLoop()
@@ -349,19 +174,17 @@ local function startMovementSpeedLoop()
 end
 
 Toggles.WalkspeedEnabled:OnChanged(function(enabled)
-	if not enabled and not Toggles.GuardSpeedEnabled.Value then
-		if walkspeedLoopConnection then
-			walkspeedLoopConnection:Disconnect()
-			walkspeedLoopConnection = nil
-		end
-	end
-	for _, c in pairs(walkspeedPropertyConnections) do c:Disconnect() end
+	for _, c in ipairs(walkspeedPropertyConnections) do c:Disconnect() end
 	walkspeedPropertyConnections = {}
-
 	if enabled then
 		local char = LocalPlayer.Character
 		if char then setupWalkspeedHook(char) end
 		startMovementSpeedLoop()
+	elseif not Toggles.GuardSpeedEnabled.Value then
+		if walkspeedLoopConnection then
+			walkspeedLoopConnection:Disconnect()
+			walkspeedLoopConnection = nil
+		end
 	end
 end)
 
@@ -387,8 +210,48 @@ Options.Walkspeed:OnChanged(function()
 	applyWalkspeed(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid"))
 end)
 
--- Dribble with TweenService (cleaner than Heartbeat loop, no freeze risk)
-local activeDribbleTween = nil
+-- Guard speed input
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if gpe or Library.Unloaded then return end
+	if not Toggles.GuardSpeedEnabled.Value then return end
+	if input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonL2 then
+		guardSpeedHolding = true
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonL2 then
+		guardSpeedHolding = false
+	end
+end)
+
+-- ============================
+-- DRIBBLE LOGIC
+-- ============================
+
+local DRIBBLE_COMBO_WINDOW = 0.2
+local lastDribbleSide = nil
+local lastDribbleBackTime = nil
+local lastDribbleSideTime = nil
+
+local dribbleKeys = {
+	[Enum.KeyCode.X] = Vector3.new(0, 0, 1),
+	[Enum.KeyCode.Z] = Vector3.new(-1, 0, 0),
+	[Enum.KeyCode.C] = Vector3.new(1, 0, 0),
+}
+
+local dribbleGamepad = {
+	[Enum.KeyCode.DPadLeft]  = Vector3.new(-1, 0, 0),
+	[Enum.KeyCode.DPadRight] = Vector3.new(1, 0, 0),
+	[Enum.KeyCode.DPadDown]  = Vector3.new(0, 0, 1),
+}
+
+local function getDribbleInputType(keyCode)
+	if keyCode == Enum.KeyCode.X or keyCode == Enum.KeyCode.DPadDown then return "back" end
+	if keyCode == Enum.KeyCode.Z or keyCode == Enum.KeyCode.DPadLeft then return "left" end
+	if keyCode == Enum.KeyCode.C or keyCode == Enum.KeyCode.DPadRight then return "right" end
+	return nil
+end
 
 local function doDribble(direction)
 	if not Toggles.DribbleEnabled.Value then return end
@@ -402,55 +265,21 @@ local function doDribble(direction)
 		activeDribbleTween = nil
 	end
 
-	dribbleDistance = Options.DribbleDistance.Value
-	local delay = Options.DribbleDelay and Options.DribbleDelay.Value or 0.2
-	local duration = (Options.DribbleDuration and Options.DribbleDuration.Value or 0.5)
-	if duration < 0.1 then duration = 0.35 end
+	local delay    = Options.DribbleDelay.Value or 0.2
+	local duration = math.max(Options.DribbleDuration.Value or 0.5, 0.1)
+	local distance = Options.DribbleDistance.Value
 
 	task.delay(delay, function()
 		if Library.Unloaded then return end
 		root = char:FindFirstChild("HumanoidRootPart")
 		if not root then return end
-
-		local startCFrame = root.CFrame
-		local endPos = root.Position + direction * dribbleDistance
-		local endCFrame = CFrame.new(endPos) * (root.CFrame - root.CFrame.Position)
-
-		activeDribbleTween = TweenService:Create(
-			root,
-			TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
-			{CFrame = endCFrame}
-		)
+		local endCFrame = CFrame.new(root.Position + direction * distance) * (root.CFrame - root.CFrame.Position)
+		activeDribbleTween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { CFrame = endCFrame })
 		activeDribbleTween:Play()
 		activeDribbleTween.Completed:Once(function()
 			activeDribbleTween = nil
 		end)
 	end)
-end
-
-local dribbleKeys = {
-	[Enum.KeyCode.X] = Vector3.new(0, 0, 1),   -- Backwards
-	[Enum.KeyCode.Z] = Vector3.new(-1, 0, 0),  -- Left
-	[Enum.KeyCode.C] = Vector3.new(1, 0, 0),   -- Right
-}
-
-local dribbleGamepad = {
-	[Enum.KeyCode.DPadLeft] = Vector3.new(-1, 0, 0),
-	[Enum.KeyCode.DPadRight] = Vector3.new(1, 0, 0),
-	[Enum.KeyCode.DPadDown] = Vector3.new(0, 0, 1),
-}
-
--- Combo: side + down (or down + side) within 0.2s = behind the back → move to opposite side
-local DRIBBLE_COMBO_WINDOW = 0.2
-local lastDribbleSide = nil   -- "left" or "right"
-local lastDribbleBackTime = nil
-local lastDribbleSideTime = nil
-
-local function getDribbleInputType(keyCode)
-	if keyCode == Enum.KeyCode.X or keyCode == Enum.KeyCode.DPadDown then return "back" end
-	if keyCode == Enum.KeyCode.Z or keyCode == Enum.KeyCode.DPadLeft then return "left" end
-	if keyCode == Enum.KeyCode.C or keyCode == Enum.KeyCode.DPadRight then return "right" end
-	return nil
 end
 
 UserInputService.InputBegan:Connect(function(input, gpe)
@@ -463,20 +292,17 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	local cam = workspace.CurrentCamera
 	if not cam then return end
 
-	local lookVec = (cam.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit
+	local lookVec  = (cam.CFrame.LookVector  * Vector3.new(1, 0, 1)).Unit
 	local rightVec = (cam.CFrame.RightVector * Vector3.new(1, 0, 1)).Unit
-
 	local dir = keyDir
-	-- Behind-the-back: right+down or down+right within 0.2s → move left; left+down or down+left → move right
+
 	if inputType == "back" then
 		if lastDribbleSide and (now - (lastDribbleSideTime or 0)) <= DRIBBLE_COMBO_WINDOW then
-			-- down after side: move to opposite side
 			dir = lastDribbleSide == "right" and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
 		end
 		lastDribbleBackTime = now
 	elseif inputType == "left" or inputType == "right" then
 		if lastDribbleBackTime and (now - lastDribbleBackTime) <= DRIBBLE_COMBO_WINDOW then
-			-- side after down: move to opposite side
 			dir = inputType == "right" and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
 		end
 		lastDribbleSide = inputType
@@ -490,21 +316,10 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	doDribble(worldDir)
 end)
 
--- Guard speed: hold F or L2 to run at GuardSpeed
-UserInputService.InputBegan:Connect(function(input, gpe)
-	if gpe or Library.Unloaded then return end
-	if not Toggles.GuardSpeedEnabled.Value then return end
-	if input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonL2 then
-		guardSpeedHolding = true
-	end
-end)
-UserInputService.InputEnded:Connect(function(input)
-	if input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonL2 then
-		guardSpeedHolding = false
-	end
-end)
+-- ============================
+-- CHEATS TAB
+-- ============================
 
--- Cheats Tab
 local CheatsGroup = Tabs.Cheats:AddLeftGroupbox("Cheats")
 
 CheatsGroup:AddToggle("DesyncEnabled", {
@@ -519,7 +334,6 @@ CheatsGroup:AddToggle("SilentVision", {
 	Tooltip = "L3=fire shot (controller). Block when bar in green: E (kb) or ButtonX/A (controller)",
 })
 
--- Username Spoofer
 CheatsGroup:AddInput("UsernameSpoof", {
 	Default = "plugged",
 	Text = "Username Spoofer",
@@ -527,95 +341,95 @@ CheatsGroup:AddInput("UsernameSpoof", {
 	Tooltip = "Type a name to display (default: plugged)",
 })
 
--- Find TopRight.TopRight.Username (path used by game: GetChildren()[8].TopRight.TopRight.Username)
+-- ============================
+-- USERNAME SPOOF LOGIC
+-- ============================
+
 local function findTopRightUsername()
-	local gui = LocalPlayer.PlayerGui
-	local children = gui:GetChildren()
-	-- Try index 8 first (exact path user gave)
-	if children[8] then
-		local c = children[8]
-		if c:FindFirstChild("TopRight") and c.TopRight:FindFirstChild("TopRight") and c.TopRight.TopRight:FindFirstChild("Username") then
-			return c.TopRight.TopRight.Username
-		end
-	end
-	-- Fallback: scan all children for TopRight.TopRight.Username
-	for _, c in pairs(children) do
-		if c:FindFirstChild("TopRight") and c.TopRight:FindFirstChild("TopRight") and c.TopRight.TopRight:FindFirstChild("Username") then
-			return c.TopRight.TopRight.Username
+	local children = LocalPlayer.PlayerGui:GetChildren()
+	for _, c in ipairs(children) do
+		local tr = c:FindFirstChild("TopRight")
+		if tr then
+			local tr2 = tr:FindFirstChild("TopRight")
+			if tr2 then
+				local un = tr2:FindFirstChild("Username")
+				if un then return un end
+			end
 		end
 	end
 	return nil
+end
+
+local function applyUsernameSpoof(name)
+	if not name or name == "" then name = "plugged" end
+	pcall(function()
+		local un = findTopRightUsername()
+		if un then un.Text = name end
+	end)
+	pcall(function()
+		local char = LocalPlayer.Character
+		if not char then return end
+		local banner = char:FindFirstChild("PlayerBanner", true)
+		if banner and banner:FindFirstChild("Background") then
+			local pn = banner.Background:FindFirstChild("PlayerName")
+			if pn then pn.Text = name end
+		end
+	end)
 end
 
 CheatsGroup:AddButton({
 	Text = "Apply Username Spoof",
 	Func = function()
 		local name = Options.UsernameSpoof.Value
-		if name == "" then name = "plugged" end
-
-		pcall(function()
-			local un = findTopRightUsername()
-			if un then un.Text = name end
-		end)
-
-		-- Find player banner in LocalPlayer's character
-		pcall(function()
-			local char = LocalPlayer.Character
-			if char then
-				local banner = char:FindFirstChild("PlayerBanner", true) -- recursive search
-				if banner and banner:FindFirstChild("Background") then
-					local pn = banner.Background:FindFirstChild("PlayerName")
-					if pn then pn.Text = name end
-				end
-			end
-		end)
-
-		Library:Notify("Username spoofed to: " .. name)
+		applyUsernameSpoof(name)
+		Library:Notify("Username spoofed to: " .. (name ~= "" and name or "plugged"))
 	end,
 })
 
--- Silent Vision logic (track hold via InputBegan/InputEnded for reliable controller support)
-local silentVisionHolding = false
-local silentVisionInputConnections = {}
-local silentVisionBarPositionResetDone = false
+-- ============================
+-- SILENT VISION LOGIC
+-- ============================
 
 local function isShootInput(input)
-	return input.KeyCode == Enum.KeyCode.E or input.KeyCode == Enum.KeyCode.ButtonX or input.KeyCode == Enum.KeyCode.ButtonA
+	return input.KeyCode == Enum.KeyCode.E
+		or input.KeyCode == Enum.KeyCode.ButtonX
+		or input.KeyCode == Enum.KeyCode.ButtonA
 end
 
 local function isControllerInput(input)
-	return input.UserInputType == Enum.UserInputType.Gamepad1 or input.UserInputType == Enum.UserInputType.Gamepad2 or
-		input.UserInputType == Enum.UserInputType.Gamepad3 or input.UserInputType == Enum.UserInputType.Gamepad4
+	return input.UserInputType == Enum.UserInputType.Gamepad1
+		or input.UserInputType == Enum.UserInputType.Gamepad2
+		or input.UserInputType == Enum.UserInputType.Gamepad3
+		or input.UserInputType == Enum.UserInputType.Gamepad4
 end
 
-local function fireShot()
-	local args = {{ Shoot = true, Type = "Shoot", HoldingQ = false, HoldingL1 = false }}
-	local action = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Server") and ReplicatedStorage.Remotes.Server:FindFirstChild("Action")
-	if action then action:FireServer(unpack(args)) end
+local function fireAction(shoot)
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	if not remotes then return end
+	local server = remotes:FindFirstChild("Server")
+	if not server then return end
+	local action = server:FindFirstChild("Action")
+	if not action then return end
+	if shoot then
+		action:FireServer({ Shoot = true, Type = "Shoot", HoldingQ = false, HoldingL1 = false })
+	else
+		action:FireServer({ Shoot = false, Type = "Shoot" })
+	end
 end
-
-local function fireShotBlock()
-	local args = {{ Shoot = false, Type = "Shoot" }}
-	local action = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Server") and ReplicatedStorage.Remotes.Server:FindFirstChild("Action")
-	if action then action:FireServer(unpack(args)) end
-end
-
-local l3FireConnection = nil
 
 local function setupL3Fire()
 	if l3FireConnection then l3FireConnection:Disconnect() end
 	l3FireConnection = UserInputService.InputBegan:Connect(function(input, gpe)
 		if gpe then return end
-		-- Controller only: L3 fires the shot
 		if isControllerInput(input) and input.KeyCode == Enum.KeyCode.ButtonL3 then
-			fireShot()
+			fireAction(true)
 		end
 	end)
 end
 setupL3Fire()
 
 local function setupSilentVisionInputTracking()
-	for _, c in pairs(silentVisionInputConnections) do pcall(function() c:Disconnect() end) end
+	for _, c in ipairs(silentVisionInputConnections) do pcall(function() c:Disconnect() end) end
 	table.clear(silentVisionInputConnections)
 
 	table.insert(silentVisionInputConnections, UserInputService.InputBegan:Connect(function(input, gpe)
@@ -640,30 +454,26 @@ local function setupSilentVision()
 		return
 	end
 
-	-- One-time: reset bar position so it doesn't start overlapping (prevents first shot auto-release)
 	silentVisionBarPositionResetDone = false
-
 	local lastBlockTime = 0
 	local lastHolding = false
+
 	silentVisionConnection = RunService.Heartbeat:Connect(function()
 		if Library.Unloaded or not Toggles.SilentVision.Value then return end
 
-		-- Find shot meter in LocalPlayer's character
 		local char = LocalPlayer.Character
 		if not char then return end
 
-		local shotMeter = char:FindFirstChild("ShotMeterUI", true) -- recursive search
+		local shotMeter = char:FindFirstChild("ShotMeterUI", true)
 		if not shotMeter or not shotMeter.Enabled then return end
 
 		local newMeter = shotMeter:FindFirstChild("NewMeter")
 		if not newMeter then return end
 
 		local greenWindow = newMeter:FindFirstChild("NewMeter")
-		-- Bar can be direct child or nested (e.g. inside a Frame)
 		local bar = newMeter:FindFirstChild("Bar") or newMeter:FindFirstChild("Bar", true) or shotMeter:FindFirstChild("Bar", true)
 		if not greenWindow or not bar then return end
 
-		-- Keep bar at safe position until user has held block (stops first-shot auto-release; game may overwrite each frame)
 		if not silentVisionHolding then
 			silentVisionBarPositionResetDone = false
 			pcall(function()
@@ -673,81 +483,78 @@ local function setupSilentVision()
 			end)
 			return
 		end
-		-- One-time skip of overlap check on first frame we're holding (layout may still be stale)
+
 		if not silentVisionBarPositionResetDone then
 			silentVisionBarPositionResetDone = true
 			return
 		end
 
-		local gwPos = greenWindow.AbsolutePosition
-		local gwSize = greenWindow.AbsoluteSize
-		local barPos = bar.AbsolutePosition
-		local barSize = bar.AbsoluteSize
+		local barPos   = bar.AbsolutePosition
+		local barSize  = bar.AbsoluteSize
+		local gwPos    = greenWindow.AbsolutePosition
+		local gwSize   = greenWindow.AbsoluteSize
 
-		-- Check overlap: bar touches or overlaps green window
-		local barRight = barPos.X + barSize.X
-		local barBottom = barPos.Y + barSize.Y
-		local gwRight = gwPos.X + gwSize.X
-		local gwBottom = gwPos.Y + gwSize.Y
-
-		local overlaps = not (barRight < gwPos.X or barPos.X > gwRight or barBottom < gwPos.Y or barPos.Y > gwBottom)
+		local overlaps = not (
+			(barPos.X + barSize.X) < gwPos.X or
+			barPos.X > (gwPos.X + gwSize.X) or
+			(barPos.Y + barSize.Y) < gwPos.Y or
+			barPos.Y > (gwPos.Y + gwSize.Y)
+		)
 
 		if overlaps and (not lastHolding or tick() - lastBlockTime > 0.15) then
 			lastHolding = true
 			lastBlockTime = tick()
-			fireShotBlock()
+			fireAction(false)
 		end
 	end)
 end
 
 Toggles.SilentVision:OnChanged(setupSilentVision)
 
--- Desync: only active when toggle on and keybind toggles state
-local function clearUnwantedScriptsDesync(character)
-	for _, v in pairs(character:GetChildren()) do
-		if v:IsA("Script") and v.Name ~= "Health" and v.Name ~= "Sound" and v:FindFirstChild("LocalScript") then
-			v:Destroy()
-		end
-	end
-end
+-- ============================
+-- DESYNC LOGIC
+-- ============================
 
 local function createDesyncGhost(character)
 	if desyncGhostModel then desyncGhostModel:Destroy() end
 	if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+
 	local clone = character:Clone()
-	if not clone then return end
 	clone.Name = "DesyncGhost"
-	for _, part in pairs(clone:GetDescendants()) do
+
+	for _, part in ipairs(clone:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.CanCollide = false
 			part.Transparency = 0.7
 			part.CastShadow = false
 		elseif part:IsA("Decal") or part:IsA("Texture") then
 			part.Transparency = 0.7
+		elseif part:IsA("Script") or part:IsA("LocalScript") or part:IsA("ModuleScript") then
+			part:Destroy()
 		end
 	end
-	for _, v in pairs(clone:GetChildren()) do
-		if v:IsA("Script") or v:IsA("LocalScript") or v:IsA("ModuleScript") then v:Destroy() end
-	end
-	if clone:FindFirstChild("Humanoid") then clone.Humanoid:Destroy() end
+
+	local hum = clone:FindFirstChildOfClass("Humanoid")
+	if hum then hum:Destroy() end
+
 	local highlight = Instance.new("Highlight")
 	highlight.FillColor = Color3.fromRGB(100, 150, 255)
 	highlight.FillTransparency = 0.5
 	highlight.OutlineColor = Color3.fromRGB(150, 200, 255)
 	highlight.OutlineTransparency = 0
 	highlight.Parent = clone
+
 	clone.Parent = workspace
 	desyncGhostModel = clone
 end
 
 local function updateDesyncGhost(character)
 	if not desyncGhostModel or not character then return end
-	for _, part in pairs(character:GetDescendants()) do
+	for _, part in ipairs(character:GetDescendants()) do
 		if part:IsA("BasePart") then
 			local ghostPart = desyncGhostModel:FindFirstChild(part.Name, true)
 			if ghostPart and ghostPart:IsA("BasePart") then
 				ghostPart.CFrame = part.CFrame
-				ghostPart.Size = part.Size
 			end
 		end
 	end
@@ -770,19 +577,6 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	end
 end)
 
-LocalPlayer.CharacterAdded:Connect(function(char)
-	if desyncGhostModel then desyncGhostModel:Destroy() desyncGhostModel = nil end
-	repeat task.wait() until char
-	clearUnwantedScriptsDesync(char)
-	if Toggles.DesyncEnabled.Value and desyncActive then createDesyncGhost(char) end
-	char.ChildAdded:Connect(function(child)
-		if child:IsA("Script") and child:FindFirstChild("LocalScript") then
-			task.wait(0.25)
-			child.LocalScript:FireServer()
-		end
-	end)
-end)
-
 local function setupDesyncLoop()
 	if desyncHeartbeatConnection then
 		desyncHeartbeatConnection:Disconnect()
@@ -794,19 +588,20 @@ local function setupDesyncLoop()
 		return
 	end
 	desyncHeartbeatConnection = RunService.Heartbeat:Connect(function()
-		local char = LocalPlayer.Character
 		if not Toggles.DesyncEnabled.Value then return end
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
 		if desyncActive then
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				if not desyncGhostModel or not desyncGhostModel.Parent then createDesyncGhost(char) end
-				updateDesyncGhost(char)
-				local currentVelocity = hrp.Velocity
-				hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(0.0001), 0)
-				hrp.AssemblyLinearVelocity = Vector3.new(math.random(2000, 4000), math.random(2000, 4000), math.random(2000, 4000))
-				RunService.RenderStepped:Wait()
-				hrp.Velocity = currentVelocity
+			if not desyncGhostModel or not desyncGhostModel.Parent then
+				createDesyncGhost(char)
 			end
+			updateDesyncGhost(char)
+			local savedVelocity = hrp.AssemblyLinearVelocity
+			hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(0.0001), 0)
+			hrp.AssemblyLinearVelocity = Vector3.new(math.random(2000, 4000), math.random(2000, 4000), math.random(2000, 4000))
+			RunService.RenderStepped:Wait()
+			hrp.AssemblyLinearVelocity = savedVelocity
 		else
 			if desyncGhostModel then desyncGhostModel:Destroy() desyncGhostModel = nil end
 		end
@@ -816,13 +611,17 @@ end
 Toggles.DesyncEnabled:OnChanged(setupDesyncLoop)
 setupDesyncLoop()
 
--- Misc Tab
+-- ============================
+-- MISC TAB
+-- ============================
+
 local MiscGroup = Tabs.Misc:AddLeftGroupbox("Misc Actions")
 
 MiscGroup:AddButton({
 	Text = "Reset Character",
 	Func = function()
-		LocalPlayer.Character:BreakJoints()
+		local char = LocalPlayer.Character
+		if char then char:BreakJoints() end
 		Library:Notify("Character reset")
 	end,
 })
@@ -830,23 +629,7 @@ MiscGroup:AddButton({
 MiscGroup:AddButton({
 	Text = "Refresh Username Spoof",
 	Func = function()
-		local name = Options.UsernameSpoof.Value
-		if name == "" then name = "plugged" end
-		pcall(function()
-			local un = findTopRightUsername()
-			if un then un.Text = name end
-		end)
-		-- Find player banner in character
-		pcall(function()
-			local char = LocalPlayer.Character
-			if char then
-				local banner = char:FindFirstChild("PlayerBanner", true)
-				if banner and banner:FindFirstChild("Background") then
-					local pn = banner.Background:FindFirstChild("PlayerName")
-					if pn then pn.Text = name end
-				end
-			end
-		end)
+		applyUsernameSpoof(Options.UsernameSpoof.Value)
 		Library:Notify("Username spoof refreshed")
 	end,
 })
@@ -857,34 +640,28 @@ MiscGroup:AddToggle("Noclip", {
 	Tooltip = "Walk through walls",
 })
 
-local noclipConn
 Toggles.Noclip:OnChanged(function(enabled)
-	if noclipConn then noclipConn:Disconnect() end
+	if noclipConn then noclipConn:Disconnect() noclipConn = nil end
 	if enabled then
 		noclipConn = RunService.Stepped:Connect(function()
 			if Library.Unloaded then return end
 			local char = LocalPlayer.Character
-			if char then
-				for _, p in pairs(char:GetDescendants()) do
-					if p:IsA("BasePart") then
-						p.CanCollide = false
-					end
-				end
+			if not char then return end
+			for _, p in ipairs(char:GetDescendants()) do
+				if p:IsA("BasePart") then p.CanCollide = false end
 			end
 		end)
 	else
 		local char = LocalPlayer.Character
 		if char then
-			for _, p in pairs(char:GetDescendants()) do
-				if p:IsA("BasePart") then
-					p.CanCollide = true
-				end
+			for _, p in ipairs(char:GetDescendants()) do
+				if p:IsA("BasePart") then p.CanCollide = true end
 			end
 		end
 	end
 end)
 
-MiscGroup:AddToggle("Infinite Jump", {
+MiscGroup:AddToggle("InfiniteJump", {
 	Text = "Infinite Jump",
 	Default = false,
 })
@@ -892,74 +669,71 @@ MiscGroup:AddToggle("Infinite Jump", {
 UserInputService.JumpRequest:Connect(function()
 	if Toggles.InfiniteJump and Toggles.InfiniteJump.Value then
 		local char = LocalPlayer.Character
-		if char and char:FindFirstChild("Humanoid") then
-			char.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-		end
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
 	end
 end)
 
--- OVR Spoof Tab (local player character = Workspace "TheLocalCharacter" equivalent)
--- Banner can be under character or in PlayerGui; search both and use recursive find
+-- ============================
+-- OVR SPOOF TAB
+-- ============================
+
 local function findPlayerBanner()
 	local char = LocalPlayer.Character
 	if char then
 		local banner = char:FindFirstChild("PlayerBanner", true)
 		if banner then return banner end
-		-- Fallback: find by LegendRep; walk up to ancestor that contains OvrBackground (full banner)
-		local legendRep = char:FindFirstChild("LegendRep", true)
-		if legendRep then
-			local p = legendRep.Parent
-			while p and p ~= char do
-				if p:FindFirstChild("OvrBackground", true) then return p end
-				p = p.Parent
+
+		for _, child in ipairs({ "LegendRep", "RookieRep" }) do
+			local rep = char:FindFirstChild(child, true)
+			if rep then
+				local p = rep.Parent
+				while p and p ~= char do
+					if p:FindFirstChild("OvrBackground", true) then return p end
+					p = p.Parent
+				end
+				return rep.Parent
 			end
-			return legendRep.Parent
 		end
-		local rookieRep = char:FindFirstChild("RookieRep", true)
-		if rookieRep then return rookieRep.Parent end
 	end
-	for _, gui in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
+
+	for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
 		if gui.Name == "PlayerBanner" then return gui end
 	end
+
 	local inWorkspace = workspace:FindFirstChild(LocalPlayer.Name)
 	if inWorkspace then
-		local banner = inWorkspace:FindFirstChild("PlayerBanner", true)
-		if banner then return banner end
+		return inWorkspace:FindFirstChild("PlayerBanner", true)
+	end
+
+	return nil
+end
+
+local repNamesToHide = { "RookieRep", "ProRep", "SuperstarRep", "EliteRep" }
+
+local function deepFind(parent, name)
+	for _, d in ipairs(parent:GetDescendants()) do
+		if d.Name == name then return d end
 	end
 	return nil
 end
 
 local function applyOvrSpoof()
 	local banner = findPlayerBanner()
-	if not banner then return false end
-	return pcall(function()
-		local legendRep = banner:FindFirstChild("LegendRep") or (function()
-			for _, d in pairs(banner:GetDescendants()) do if d.Name == "LegendRep" then return d end end
-			return nil
-		end)()
-		local repNamesToHide = { "RookieRep", "ProRep", "SuperstarRep", "EliteRep" }
-		for _, name in pairs(repNamesToHide) do
-			local rep = banner:FindFirstChild(name) or (function()
-				for _, d in pairs(banner:GetDescendants()) do if d.Name == name then return d end end
-				return nil
-			end)()
+	if not banner then return end
+	pcall(function()
+		local legendRep = banner:FindFirstChild("LegendRep") or deepFind(banner, "LegendRep")
+		for _, name in ipairs(repNamesToHide) do
+			local rep = banner:FindFirstChild(name) or deepFind(banner, name)
 			if rep and rep:IsA("GuiObject") then rep.Visible = false end
 		end
 		if legendRep and legendRep:IsA("GuiObject") then legendRep.Visible = true end
-		local ovrBg = banner:FindFirstChild("OvrBackground") or (function()
-			for _, d in pairs(banner:GetDescendants()) do if d.Name == "OvrBackground" then return d end end
-			return nil
-		end)()
+
+		local ovrBg = banner:FindFirstChild("OvrBackground") or deepFind(banner, "OvrBackground")
 		if ovrBg then
-			local ovrStroke = ovrBg:FindFirstChild("OvrStroke") or (function()
-				for _, d in pairs(ovrBg:GetDescendants()) do if d.Name == "OvrStroke" then return d end end
-				return nil
-			end)()
+			local ovrStroke = ovrBg:FindFirstChild("OvrStroke") or deepFind(ovrBg, "OvrStroke")
 			if ovrStroke then
-				local overall = ovrStroke:FindFirstChild("Overall") or (function()
-					for _, d in pairs(ovrStroke:GetDescendants()) do if d.Name == "Overall" then return d end end
-					return nil
-				end)()
+				local overall = ovrStroke:FindFirstChild("Overall") or deepFind(ovrStroke, "Overall")
 				if overall and (overall:IsA("TextLabel") or overall:IsA("TextBox")) then
 					overall.Text = "99"
 				end
@@ -969,18 +743,28 @@ local function applyOvrSpoof()
 end
 
 local OvrSpoofGroup = Tabs["OVR Spoof"]:AddLeftGroupbox("Overall Spoof")
+
 OvrSpoofGroup:AddToggle("OvrSpoofEnabled", {
 	Text = "OVR Spoof",
 	Default = false,
 	Tooltip = "Show LegendRep, hide Rookie/Pro/Superstar/Elite Rep, set Overall to 99",
 })
 
--- Retry OVR spoof a few times when enabling (banner may load late)
+local function updateOvrSpoofLoop()
+	if ovrSpoofLoopConn then ovrSpoofLoopConn:Disconnect() ovrSpoofLoopConn = nil end
+	if Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value then
+		ovrSpoofLoopConn = RunService.Heartbeat:Connect(function()
+			if Library.Unloaded or not Toggles.OvrSpoofEnabled.Value then return end
+			applyOvrSpoof()
+		end)
+	end
+end
+
 local function scheduleOvrSpoofRetries()
 	if not (Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value) then return end
-	for _, delay in pairs({0, 0.5, 1, 2}) do
+	for _, delay in ipairs({ 0, 0.5, 1, 2 }) do
 		task.delay(delay, function()
-			if Library.Unloaded or not (Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value) then return end
+			if Library.Unloaded or not Toggles.OvrSpoofEnabled.Value then return end
 			applyOvrSpoof()
 		end)
 	end
@@ -991,82 +775,76 @@ Toggles.OvrSpoofEnabled:OnChanged(function(enabled)
 		applyOvrSpoof()
 		scheduleOvrSpoofRetries()
 	end
+	updateOvrSpoofLoop()
 end)
 
+-- ============================
+-- CREDITS TAB
+-- ============================
+
+local CreditsGroup = Tabs.Credits:AddLeftGroupbox("evilware Credits")
+CreditsGroup:AddLabel("evilware - basketball cheats & movement")
+CreditsGroup:AddDivider()
+CreditsGroup:AddLabel("Main Dev: 6vi1")
+CreditsGroup:AddLabel("Main Dev: vamp")
+CreditsGroup:AddLabel("UI: Obsidian (LinoriaLib)")
+CreditsGroup:AddLabel("Inspiration: hoops")
+CreditsGroup:AddLabel("Testing: the streets")
+CreditsGroup:AddLabel("Vibes: immaculate")
+CreditsGroup:AddDivider()
+CreditsGroup:AddLabel("Special thanks to everyone who uses this")
+CreditsGroup:AddLabel("— 6vi1 / vamp")
+
+-- ============================
+-- CHARACTER RESPAWN HANDLER
+-- ============================
+
 LocalPlayer.CharacterAdded:Connect(function(char)
+	Character = char
+	Humanoid = char:WaitForChild("Humanoid")
+	RootPart = char:WaitForChild("HumanoidRootPart")
+
+	if Toggles.WalkspeedEnabled and Toggles.WalkspeedEnabled.Value then
+		setupWalkspeedHook(char)
+		Humanoid.WalkSpeed = Options.Walkspeed.Value
+	end
+
 	if Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value then
 		task.defer(function()
 			applyOvrSpoof()
 			scheduleOvrSpoofRetries()
 		end)
 	end
+
+	if desyncGhostModel then desyncGhostModel:Destroy() desyncGhostModel = nil end
 end)
 
--- Keep OVR spoof applied (game may reset banner visibility/text)
-local ovrSpoofLoopConn = nil
-local function updateOvrSpoofLoop()
-	if ovrSpoofLoopConn then
-		ovrSpoofLoopConn:Disconnect()
-		ovrSpoofLoopConn = nil
-	end
-	if Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value then
-		ovrSpoofLoopConn = RunService.Heartbeat:Connect(function()
-			if Library.Unloaded or not (Toggles.OvrSpoofEnabled and Toggles.OvrSpoofEnabled.Value) then return end
-			applyOvrSpoof()
-		end)
-	end
-end
-Toggles.OvrSpoofEnabled:OnChanged(function(enabled)
-	updateOvrSpoofLoop()
-end)
-
--- Credits Tab
-local CreditsGroup = Tabs.Credits:AddLeftGroupbox("evilware Credits")
-
-CreditsGroup:AddLabel("evilware - basketball cheats & movement")
-CreditsGroup:AddDivider()
-CreditsGroup:AddLabel("Main Dev: 6vi1")
-CreditsGroup:AddLabel("Main Dev: vamp")
-CreditsGroup:AddLabel("UI: Obsidian (LinoriaLib)")
-CreditsGroup:AddLabel("TweenService: Roblox")
-CreditsGroup:AddLabel("Inspiration: hoops")
-CreditsGroup:AddLabel("Testing: the streets")
-CreditsGroup:AddLabel("Vibes: immaculate")
-CreditsGroup:AddLabel("Coffee: essential")
-CreditsGroup:AddLabel("Code: lua supremacy")
-CreditsGroup:AddDivider()
-CreditsGroup:AddLabel("Special thanks to everyone who uses this")
-CreditsGroup:AddLabel("— 6vi1 / vamp")
-
--- Character respawn handler
-LocalPlayer.CharacterAdded:Connect(function(char)
-	Character = char
-	Humanoid = char:WaitForChild("Humanoid")
-	RootPart = char:WaitForChild("HumanoidRootPart")
-	if Toggles.WalkspeedEnabled and Toggles.WalkspeedEnabled.Value then
-		setupWalkspeedHook(char)
-		Humanoid.WalkSpeed = Options.Walkspeed.Value
-	end
-end)
+-- ============================
+-- UNLOAD HANDLER
+-- ============================
 
 Library:OnUnload(function()
 	if walkspeedLoopConnection then walkspeedLoopConnection:Disconnect() end
-	for _, c in pairs(walkspeedPropertyConnections) do pcall(function() c:Disconnect() end) end
+	for _, c in ipairs(walkspeedPropertyConnections) do pcall(function() c:Disconnect() end) end
 	if silentVisionConnection then silentVisionConnection:Disconnect() end
-	for _, c in pairs(silentVisionInputConnections) do pcall(function() c:Disconnect() end) end
+	for _, c in ipairs(silentVisionInputConnections) do pcall(function() c:Disconnect() end) end
 	if l3FireConnection then l3FireConnection:Disconnect() end
 	if activeDribbleTween then activeDribbleTween:Cancel() end
 	if noclipConn then noclipConn:Disconnect() end
 	if ovrSpoofLoopConn then ovrSpoofLoopConn:Disconnect() end
+	if desyncHeartbeatConnection then desyncHeartbeatConnection:Disconnect() end
+	if desyncGhostModel then desyncGhostModel:Destroy() end
 end)
 
--- UI Settings
+-- ============================
+-- UI SETTINGS
+-- ============================
+
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
 MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightShift", NoUI = true, Text = "Menu keybind" })
 MenuGroup:AddButton("Unload", function() Library:Unload() end)
 Library.ToggleKeybind = Options.MenuKeybind
 
--- SaveManager & ThemeManager
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
@@ -1075,6 +853,7 @@ SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
 SaveManager:BuildConfigSection(Tabs["UI Settings"])
 ThemeManager:ApplyToTab(Tabs["UI Settings"])
 SaveManager:LoadAutoloadConfig()
-task.defer(updateOvrSpoofLoop) -- apply loop if OVR Spoof was loaded from config
+
+task.defer(updateOvrSpoofLoop)
 
 print("evilware loaded | 6vi1 / vamp")
