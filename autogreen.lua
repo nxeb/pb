@@ -2,16 +2,39 @@
 -- Loaded at runtime by the main script
 
 return function(deps)
+	local Players = game:GetService("Players")
 	local RunService = game:GetService("RunService")
 	local UserInputService = game:GetService("UserInputService")
+	local LocalPlayer = Players.LocalPlayer
 
 	local Toggles = deps.Toggles
 	local Options = deps.Options
 	local RegisterPacket = deps.RegisterPacket
 	local UnregisterPacket = deps.UnregisterPacket
 	local ShootRemote = deps.ShootRemote
-	local getCharacterModel = deps.getCharacterModel
-	local isPlayerMoving = deps.isPlayerMoving
+
+	local function getCharacterModel()
+		local chars = workspace:FindFirstChild("Characters")
+		if not chars then return nil end
+		return chars:FindFirstChild(LocalPlayer.Name)
+	end
+
+	local function isPlayerMoving()
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.A)
+			or UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.D) then
+			return true
+		end
+		local gamepads = UserInputService:GetConnectedGamepads()
+		for _, gp in gamepads do
+			local state = UserInputService:GetGamepadState(gp)
+			for _, input in state do
+				if input.KeyCode == Enum.KeyCode.Thumbstick1 then
+					if input.Position.Magnitude > 0.2 then return true end
+				end
+			end
+		end
+		return false
+	end
 
 	local function findMeterGui(char, meterType)
 		if not char or not meterType then return nil end
