@@ -542,7 +542,7 @@ GreenRight:AddSlider("DunkDelay", {
 })
 
 -- AutoGreen loaded from GitHub (unobfuscated, obfuscator breaks task.delay/FireServer)
-local AUTOGREEN_URL = "https://raw.githubusercontent.com/nxeb/pb/refs/heads/main/autogreen.lua"
+local AUTOGREEN_URL = "https://raw.githubusercontent.com/nxeb/pb/refs/heads/main/autogreen.lua?t=" .. tostring(os.time())
 local agResult = nil
 
 local agOk, agErr = pcall(function()
