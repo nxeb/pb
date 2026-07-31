@@ -543,17 +543,37 @@ GreenRight:AddSlider("DunkDelay", {
 
 -- AutoGreen loaded from GitHub (unobfuscated, obfuscator breaks task.delay/FireServer)
 local AUTOGREEN_URL = "https://raw.githubusercontent.com/nxeb/pb/refs/heads/main/autogreen.lua"
--- main script hosted at: https://raw.githubusercontent.com/nxeb/pb/refs/heads/main/theothers.lua
-local agModule = loadstring(game:HttpGet(AUTOGREEN_URL))()
-local agResult = agModule({
-	Toggles = Toggles,
-	Options = Options,
-	RegisterPacket = RegisterPacket,
-	UnregisterPacket = UnregisterPacket,
-	ShootRemote = ShootRemote,
-	getCharacterModel = getCharacterModel,
-	isPlayerMoving = isPlayerMoving,
-})
+local agResult = nil
+
+local agOk, agErr = pcall(function()
+	local agSrc = game:HttpGet(AUTOGREEN_URL)
+	if not agSrc or #agSrc < 10 then
+		warn("[VisionHub] AutoGreen: failed to download module (empty response)")
+		return
+	end
+	local agFunc, loadErr = loadstring(agSrc)
+	if not agFunc then
+		warn("[VisionHub] AutoGreen: loadstring failed:", loadErr)
+		return
+	end
+	local agModule = agFunc()
+	if type(agModule) ~= "function" then
+		warn("[VisionHub] AutoGreen: module did not return a function, got:", type(agModule))
+		return
+	end
+	agResult = agModule({
+		Toggles = Toggles,
+		Options = Options,
+		RegisterPacket = RegisterPacket,
+		UnregisterPacket = UnregisterPacket,
+		ShootRemote = ShootRemote,
+	})
+	warn("[VisionHub] AutoGreen module loaded successfully")
+end)
+
+if not agOk then
+	warn("[VisionHub] AutoGreen failed to load:", agErr)
+end
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- TAB: VISUALS
