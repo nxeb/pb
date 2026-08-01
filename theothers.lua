@@ -356,7 +356,13 @@ CharRight:AddDivider()
 CharRight:AddToggle("DribbleExtender", {
 	Text = "Dribble Distance Extender",
 	Default = false,
-	Tooltip = "Tweens farther: Z=Left C=Right X=Back V=Forward",
+})
+
+CharRight:AddDropdown("DribbleMethod", {
+	Values = {"Velocity", "Tween"},
+	Default = 1,
+	Text = "Method",
+	Tooltip = "Velocity = scales game physics (smooth), Tween = pushes HRP directly (can snap back)",
 })
 
 CharRight:AddSlider("DribbleBoostAmount", {
@@ -595,58 +601,49 @@ local function startDribbleExtender()
 			return
 		end
 
-		if isDribbling and not wasDribbling then
-			wasDribbling = true
+		local method = Options.DribbleMethod and Options.DribbleMethod.Value or "Velocity"
+		local mult = Options.DribbleBoostAmount and Options.DribbleBoostAmount.Value or 1.5
 
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				local mult = Options.DribbleBoostAmount and Options.DribbleBoostAmount.Value or 1.5
-				local comboStr = flushRecentCombo()
-
-				-- mobile thumbstick fallback: read Stick offset on OffenseThumbstick.Dribble
-				if comboStr == "" then
-					local pg = LocalPlayer:FindFirstChild("PlayerGui")
-					if pg then
-						for _, gui in pg:GetDescendants() do
-							if gui.Name == "Dribble" and gui:IsA("GuiObject") then
-								local stick = gui:FindFirstChild("Stick")
-								if stick then
-									local px = stick.Position.X.Scale - 0.5
-									local py = stick.Position.Y.Scale - 0.5
-									if math.abs(px) > 0.15 or math.abs(py) > 0.15 then
-										if math.abs(px) >= math.abs(py) then
-											comboStr = (px < 0) and "Z" or "C"
-										else
-											-- Y+ is down in this UI
-											comboStr = (py > 0) and "X" or "V"
-										end
-									end
-								end
-								break
-							end
-						end
+		if method == "Velocity" then
+			-- scales ProxyCharacter BodyVelocity during dribble (works with game physics)
+			if isDribbling then
+				local proxy = workspace:FindFirstChild("ProxyCharacter")
+				if proxy then
+					local bv = proxy:FindFirstChild("MovementVelocity")
+					if bv and bv:IsA("BodyVelocity") and bv.Velocity.Magnitude > 1 then
+						bv.Velocity = bv.Velocity.Unit * bv.Velocity.Magnitude * mult
 					end
 				end
-
-				local moveDir = getComboDirection(hrp, comboStr)
-				if moveDir.Magnitude > 0.01 then
-					moveDir = moveDir.Unit
-				else
-					moveDir = hrp.CFrame.LookVector
-				end
-
-				local boostDist = (mult - 1.0) * 8
-				local targetPos = hrp.Position + moveDir * boostDist
-				targetPos = Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)
-
-				if lastDribbleTween then lastDribbleTween:Cancel() end
-				lastDribbleTween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					CFrame = CFrame.new(targetPos) * (hrp.CFrame - hrp.CFrame.Position)
-				})
-				lastDribbleTween:Play()
 			end
-		elseif not isDribbling then
-			wasDribbling = false
+			wasDribbling = isDribbling
+
+		elseif method == "Tween" then
+			if isDribbling and not wasDribbling then
+				wasDribbling = true
+
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local comboStr = flushRecentCombo()
+					local moveDir = getComboDirection(hrp, comboStr)
+					if moveDir.Magnitude > 0.01 then
+						moveDir = moveDir.Unit
+					else
+						moveDir = hrp.CFrame.LookVector
+					end
+
+					local boostDist = (mult - 1.0) * 8
+					local targetPos = hrp.Position + moveDir * boostDist
+					targetPos = Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)
+
+					if lastDribbleTween then lastDribbleTween:Cancel() end
+					lastDribbleTween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+						CFrame = CFrame.new(targetPos) * (hrp.CFrame - hrp.CFrame.Position)
+					})
+					lastDribbleTween:Play()
+				end
+			elseif not isDribbling then
+				wasDribbling = false
+			end
 		end
 	end)
 end
@@ -1099,9 +1096,12 @@ Toggles.NameESP:OnChanged(checkESP)
 
 -- hide / spoof other players' nametags
 local otherNameConn = nil
+local otherNameGuiConn = nil
 
 local function startOtherNameLoop()
 	if otherNameConn then return end
+
+	-- fast loop: nametags + banners only (lightweight)
 	otherNameConn = RunService.Heartbeat:Connect(function()
 		if Library.Unloaded then
 			if otherNameConn then otherNameConn:Disconnect() otherNameConn = nil end
@@ -1115,11 +1115,9 @@ local function startOtherNameLoop()
 		local spoofText = Options.SpoofOtherText and Options.SpoofOtherText.Value or "dumbass im spoofed"
 		local myChar = getCharacterModel()
 		local targets = getAllCharacterModels()
-		local otherNames = {}
 
 		for _, model in targets do
 			if model == myChar then continue end
-			table.insert(otherNames, model.Name)
 
 			local head = model:FindFirstChild("Head")
 			if head then
@@ -1154,27 +1152,43 @@ local function startOtherNameLoop()
 				end
 			end
 		end
+	end)
 
-		if spoofOn then
-			local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-			if playerGui then
-				for _, gui in playerGui:GetChildren() do
-					if gui:IsA("ScreenGui") then
-						for _, obj in gui:GetDescendants() do
-							if (obj:IsA("TextLabel") or obj:IsA("TextButton")) then
-								for _, oName in otherNames do
-									if obj.Text == oName then
-										obj.Text = spoofText
-										break
-									end
+	-- slow loop: PlayerGui scan for foul/stat screens (every 0.5s)
+	if not otherNameGuiConn then
+		task.spawn(function()
+			while not Library.Unloaded do
+				task.wait(0.5)
+				local spoofOn = Toggles.SpoofOtherNames and Toggles.SpoofOtherNames.Value
+				if not spoofOn then continue end
+
+				local spoofText = Options.SpoofOtherText and Options.SpoofOtherText.Value or "dumbass im spoofed"
+				local myChar = getCharacterModel()
+				local targets = getAllCharacterModels()
+				local otherNames = {}
+				for _, model in targets do
+					if model ~= myChar then
+						otherNames[model.Name] = true
+					end
+				end
+
+				local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+				if playerGui then
+					for _, gui in playerGui:GetChildren() do
+						if gui:IsA("ScreenGui") and gui.Enabled then
+							for _, obj in gui:GetDescendants() do
+								if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and otherNames[obj.Text] then
+									obj.Text = spoofText
 								end
 							end
 						end
 					end
 				end
 			end
-		end
-	end)
+			otherNameGuiConn = nil
+		end)
+		otherNameGuiConn = true
+	end
 end
 
 local function stopOtherNameLoop()
