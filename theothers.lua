@@ -466,6 +466,10 @@ local COMBO_KEYS = {
 	[Enum.KeyCode.X] = "X",
 	[Enum.KeyCode.C] = "C",
 	[Enum.KeyCode.V] = "V",
+	[Enum.KeyCode.DPadLeft] = "Z",
+	[Enum.KeyCode.DPadDown] = "X",
+	[Enum.KeyCode.DPadRight] = "C",
+	[Enum.KeyCode.DPadUp] = "V",
 }
 
 -- relative to character facing (HRP)
@@ -530,7 +534,7 @@ local function startDribbleExtender()
 	if dribbleConn then return end
 	local wasDribbling = false
 
-	-- track keyboard combo binds
+	-- track keyboard + DPad combo binds
 	if not dribbleInputConn then
 		dribbleInputConn = UserInputService.InputBegan:Connect(function(input, gp)
 			if gp then return end
