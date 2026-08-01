@@ -208,9 +208,18 @@ PlayerLeft:AddInput("SpoofName", {
 				for _, gui in playerGui:GetChildren() do
 					if gui:IsA("ScreenGui") then
 						for _, obj in gui:GetDescendants() do
-							if obj.Name == "PlayerName" and (obj:IsA("TextLabel") or obj:IsA("TextButton")) then
-								if obj.Text == LocalPlayer.Name or obj.Text == ("@" .. LocalPlayer.Name) then
-									obj.Text = obj.Text:find("@") and ("@" .. displayName) or displayName
+							if (obj:IsA("TextLabel") or obj:IsA("TextButton")) then
+								if obj.Name == "PlayerName" then
+									if obj.Text == LocalPlayer.Name or obj.Text == ("@" .. LocalPlayer.Name) then
+										obj.Text = obj.Text:find("@") and ("@" .. displayName) or displayName
+									end
+								end
+								if obj.Text == LocalPlayer.Name or obj.Text == LocalPlayer.DisplayName then
+									local parentName = obj.Parent and obj.Parent.Name or ""
+									if parentName:lower():find("foul") or parentName:lower():find("stat")
+										or gui.Name:lower():find("foul") or gui.Name:lower():find("hud") then
+										obj.Text = displayName
+									end
 								end
 							end
 						end
@@ -347,7 +356,7 @@ CharRight:AddDivider()
 CharRight:AddToggle("DribbleExtender", {
 	Text = "Dribble Distance Extender",
 	Default = false,
-	Tooltip = "Scales ProxyCharacter velocity during dribble animations",
+	Tooltip = "Tweens farther: Z=Left C=Right X=Back V=Forward",
 })
 
 CharRight:AddSlider("DribbleBoostAmount", {
@@ -355,6 +364,23 @@ CharRight:AddSlider("DribbleBoostAmount", {
 	Default = 1.5,
 	Min = 1.0,
 	Max = 5.0,
+	Rounding = 1,
+	Suffix = "x",
+})
+
+CharRight:AddDivider()
+
+CharRight:AddToggle("DribbleAnimSpeed", {
+	Text = "Dribble Anim Speed",
+	Default = false,
+	Tooltip = "Adjust dribble animation playback speed",
+})
+
+CharRight:AddSlider("DribbleAnimSpeedValue", {
+	Text = "Anim Speed",
+	Default = 1.0,
+	Min = 0.5,
+	Max = 3.0,
 	Rounding = 1,
 	Suffix = "x",
 })
@@ -427,30 +453,196 @@ local function stopSpeedBoost()
 	end
 end
 
--- dribble extender via ProxyCharacter BodyVelocity scaling
+-- dribble extender via TweenService — push direction from combo binds
+-- Game mapping (matches mobile dribble thumbstick):
+--   Z = Left, C = Right, X = Back, V = Forward
 local dribbleConn = nil
+local dribbleInputConn = nil
+local lastDribbleTween = nil
+local recentCombo = {} -- { {key="Z", t=os.clock()}, ... }
+
+local COMBO_KEYS = {
+	[Enum.KeyCode.Z] = "Z",
+	[Enum.KeyCode.X] = "X",
+	[Enum.KeyCode.C] = "C",
+	[Enum.KeyCode.V] = "V",
+}
+
+-- relative to character facing (HRP)
+local COMBO_DIRS = {
+	Z = "Left",
+	C = "Right",
+	X = "Back",
+	V = "Forward",
+}
+
+local function getComboDirection(hrp, comboStr)
+	if not comboStr or comboStr == "" or comboStr == "H" then
+		return hrp.CFrame.LookVector
+	end
+
+	-- last directional key in the combo decides push direction
+	local dirName = nil
+	for i = #comboStr, 1, -1 do
+		local ch = comboStr:sub(i, i)
+		if COMBO_DIRS[ch] then
+			dirName = COMBO_DIRS[ch]
+			break
+		end
+	end
+
+	if dirName == "Left" then
+		return -hrp.CFrame.RightVector
+	elseif dirName == "Right" then
+		return hrp.CFrame.RightVector
+	elseif dirName == "Back" then
+		return -hrp.CFrame.LookVector
+	else -- Forward / fallback
+		return hrp.CFrame.LookVector
+	end
+end
+
+local function flushRecentCombo()
+	local now = os.clock()
+	local kept = {}
+	for _, entry in recentCombo do
+		if now - entry.t < 0.35 then
+			table.insert(kept, entry)
+		end
+	end
+	recentCombo = kept
+	local s = ""
+	for _, entry in recentCombo do
+		s = s .. entry.key
+	end
+	return s
+end
+
+local function trackComboKey(key)
+	table.insert(recentCombo, { key = key, t = os.clock() })
+	-- keep buffer small
+	if #recentCombo > 6 then
+		table.remove(recentCombo, 1)
+	end
+end
 
 local function startDribbleExtender()
 	if dribbleConn then return end
+	local wasDribbling = false
+
+	-- track keyboard combo binds
+	if not dribbleInputConn then
+		dribbleInputConn = UserInputService.InputBegan:Connect(function(input, gp)
+			if gp then return end
+			local key = COMBO_KEYS[input.KeyCode]
+			if key then trackComboKey(key) end
+		end)
+	end
+
+	-- also track mobile OffenseButton Z/X/C/V presses via GuiButton clicks if present
+	task.spawn(function()
+		local pg = LocalPlayer:FindFirstChild("PlayerGui")
+		if not pg then return end
+		local function hookGui(gui)
+			for _, obj in gui:GetDescendants() do
+				if obj:IsA("GuiButton") and (obj.Name == "Z" or obj.Name == "X" or obj.Name == "C" or obj.Name == "V") then
+					if not obj:GetAttribute("VH_ComboHooked") then
+						obj:SetAttribute("VH_ComboHooked", true)
+						obj.MouseButton1Down:Connect(function()
+							trackComboKey(obj.Name)
+						end)
+					end
+				end
+			end
+		end
+		for _, g in pg:GetChildren() do hookGui(g) end
+		pg.ChildAdded:Connect(function(c)
+			task.wait(0.2)
+			hookGui(c)
+		end)
+	end)
+
 	dribbleConn = RunService.Heartbeat:Connect(function()
-		if not (Toggles.DribbleExtender and Toggles.DribbleExtender.Value) then return end
+		local extendOn = Toggles.DribbleExtender and Toggles.DribbleExtender.Value
+		local animSpeedOn = Toggles.DribbleAnimSpeed and Toggles.DribbleAnimSpeed.Value
 
 		local char = getCharacterModel()
 		if not char then return end
 		local action = char:GetAttribute("Action") or ""
-		if action ~= "Dribbling" then return end
+		local isDribbling = (action == "Dribbling")
 
-		local proxy = workspace:FindFirstChild("ProxyCharacter")
-		if not proxy then return end
-		local bv = proxy:FindFirstChild("MovementVelocity")
-		if not bv or not bv:IsA("BodyVelocity") then return end
+		if animSpeedOn then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				local animator = hum:FindFirstChildOfClass("Animator")
+				if animator then
+					local speed = Options.DribbleAnimSpeedValue and Options.DribbleAnimSpeedValue.Value or 1.0
+					for _, track in animator:GetPlayingAnimationTracks() do
+						if isDribbling then
+							track:AdjustSpeed(speed)
+						end
+					end
+				end
+			end
+		end
 
-		local vel = bv.Velocity
-		if vel.Magnitude < 1 then return end
+		if not extendOn then
+			wasDribbling = false
+			return
+		end
 
-		local mult = Options.DribbleBoostAmount and Options.DribbleBoostAmount.Value or 1.5
-		if mult > 1.0 then
-			bv.Velocity = vel.Unit * vel.Magnitude * mult
+		if isDribbling and not wasDribbling then
+			wasDribbling = true
+
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local mult = Options.DribbleBoostAmount and Options.DribbleBoostAmount.Value or 1.5
+				local comboStr = flushRecentCombo()
+
+				-- mobile thumbstick fallback: read Stick offset on OffenseThumbstick.Dribble
+				if comboStr == "" then
+					local pg = LocalPlayer:FindFirstChild("PlayerGui")
+					if pg then
+						for _, gui in pg:GetDescendants() do
+							if gui.Name == "Dribble" and gui:IsA("GuiObject") then
+								local stick = gui:FindFirstChild("Stick")
+								if stick then
+									local px = stick.Position.X.Scale - 0.5
+									local py = stick.Position.Y.Scale - 0.5
+									if math.abs(px) > 0.15 or math.abs(py) > 0.15 then
+										if math.abs(px) >= math.abs(py) then
+											comboStr = (px < 0) and "Z" or "C"
+										else
+											-- Y+ is down in this UI
+											comboStr = (py > 0) and "X" or "V"
+										end
+									end
+								end
+								break
+							end
+						end
+					end
+				end
+
+				local moveDir = getComboDirection(hrp, comboStr)
+				if moveDir.Magnitude > 0.01 then
+					moveDir = moveDir.Unit
+				else
+					moveDir = hrp.CFrame.LookVector
+				end
+
+				local boostDist = (mult - 1.0) * 8
+				local targetPos = hrp.Position + moveDir * boostDist
+				targetPos = Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)
+
+				if lastDribbleTween then lastDribbleTween:Cancel() end
+				lastDribbleTween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					CFrame = CFrame.new(targetPos) * (hrp.CFrame - hrp.CFrame.Position)
+				})
+				lastDribbleTween:Play()
+			end
+		elseif not isDribbling then
+			wasDribbling = false
 		end
 	end)
 end
@@ -459,13 +651,20 @@ Toggles.SpeedBoost:OnChanged(function(v)
 	if v then startSpeedBoost() else stopSpeedBoost() end
 end)
 
-Toggles.DribbleExtender:OnChanged(function(v)
-	if v then
+local function checkDribbleConn()
+	local need = (Toggles.DribbleExtender and Toggles.DribbleExtender.Value) or (Toggles.DribbleAnimSpeed and Toggles.DribbleAnimSpeed.Value)
+	if need then
 		startDribbleExtender()
 	else
 		if dribbleConn then dribbleConn:Disconnect() dribbleConn = nil end
+		if dribbleInputConn then dribbleInputConn:Disconnect() dribbleInputConn = nil end
+		if lastDribbleTween then lastDribbleTween:Cancel() lastDribbleTween = nil end
+		recentCombo = {}
 	end
-end)
+end
+
+Toggles.DribbleExtender:OnChanged(checkDribbleConn)
+Toggles.DribbleAnimSpeed:OnChanged(checkDribbleConn)
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- TAB: AUTO GREEN
@@ -478,38 +677,19 @@ end)
 --           Meter_Green > UIGradient (Transparency = green zone)
 -- Shot release = ShootRemote:FireServer({Shoot = false})
 
-local GreenLeft  = Tabs.AutoGreen:AddLeftGroupbox("UI Trace (Auto)", "crosshair")
-local GreenRight = Tabs.AutoGreen:AddRightGroupbox("Timed Release", "clock")
+local GreenLeft  = Tabs.AutoGreen:AddLeftGroupbox("Auto Green", "target")
+local GreenRight = Tabs.AutoGreen:AddRightGroupbox("Timing", "clock")
 
--- ===== METHOD 1: UI TRACE =====
-
-GreenLeft:AddToggle("AutoGreen", {
-	Text = "Auto Green (UI Trace)",
+GreenLeft:AddToggle("TimedRelease", {
+	Text = "Auto Green",
 	Default = false,
-	Tooltip = "Watches the actual meter UI and releases at the green zone",
-})
-
-GreenLeft:AddSlider("GreenOffset", {
-	Text = "Green Offset",
-	Default = 0,
-	Min = -50,
-	Max = 50,
-	Rounding = 0,
-	Suffix = "ms",
+	Tooltip = "Automatically releases shot after a timed delay",
 })
 
 GreenLeft:AddDropdown("GreenChance", {
 	Values = {"100%", "90%", "75%", "50%"},
 	Default = 1,
 	Text = "Green Chance",
-})
-
--- ===== METHOD 2: TIMED RELEASE =====
-
-GreenRight:AddToggle("TimedRelease", {
-	Text = "Timed Release",
-	Default = false,
-	Tooltip = "Waits for meter to appear, then releases after a set delay",
 })
 
 GreenRight:AddSlider("ShootDelay", {
@@ -519,7 +699,7 @@ GreenRight:AddSlider("ShootDelay", {
 	Max = 1.0,
 	Rounding = 2,
 	Suffix = "s",
-	Tooltip = "Standing shot (E / ButtonX)",
+	Tooltip = "Standing shot",
 })
 
 GreenRight:AddSlider("FadeDelay", {
@@ -529,7 +709,7 @@ GreenRight:AddSlider("FadeDelay", {
 	Max = 1.0,
 	Rounding = 2,
 	Suffix = "s",
-	Tooltip = "Fadeaway / moving shot timing",
+	Tooltip = "Fadeaway / moving shot",
 })
 
 GreenRight:AddSlider("DunkDelay", {
@@ -539,7 +719,7 @@ GreenRight:AddSlider("DunkDelay", {
 	Max = 1.0,
 	Rounding = 2,
 	Suffix = "s",
-	Tooltip = "Dunk (Space / ButtonY)",
+	Tooltip = "Dunk timing",
 })
 
 -- AutoGreen loaded from GitHub (unobfuscated, obfuscator breaks task.delay/FireServer)
@@ -566,7 +746,6 @@ local agOk, agErr = pcall(function()
 		Toggles = Toggles,
 		Options = Options,
 		RegisterPacket = RegisterPacket,
-		UnregisterPacket = UnregisterPacket,
 		ShootRemote = ShootRemote,
 	})
 	warn("[VisionHub] AutoGreen module loaded successfully")
@@ -932,9 +1111,11 @@ local function startOtherNameLoop()
 		local spoofText = Options.SpoofOtherText and Options.SpoofOtherText.Value or "dumbass im spoofed"
 		local myChar = getCharacterModel()
 		local targets = getAllCharacterModels()
+		local otherNames = {}
 
 		for _, model in targets do
 			if model == myChar then continue end
+			table.insert(otherNames, model.Name)
 
 			local head = model:FindFirstChild("Head")
 			if head then
@@ -963,6 +1144,26 @@ local function startOtherNameLoop()
 						for _, obj in banner:GetDescendants() do
 							if obj.Name == "PlayerName" and (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= spoofText then
 								obj.Text = spoofText
+							end
+						end
+					end
+				end
+			end
+		end
+
+		if spoofOn then
+			local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+			if playerGui then
+				for _, gui in playerGui:GetChildren() do
+					if gui:IsA("ScreenGui") then
+						for _, obj in gui:GetDescendants() do
+							if (obj:IsA("TextLabel") or obj:IsA("TextButton")) then
+								for _, oName in otherNames do
+									if obj.Text == oName then
+										obj.Text = spoofText
+										break
+									end
+								end
 							end
 						end
 					end
@@ -1184,8 +1385,9 @@ end)
 MiscRight:AddLabel("Game: Practical Basketball")
 MiscRight:AddLabel("VisionHub v5 | @v9os & @6crm")
 MiscRight:AddLabel("Executor: Xeno Compatible")
+MiscRight:AddLabel("Mobile: Supported")
 MiscRight:AddDivider()
-MiscRight:AddLabel("Toggle: RightShift", true)
+MiscRight:AddLabel("Toggle: RightShift / Touch Button", true)
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- TAB: SETTINGS
@@ -1223,6 +1425,71 @@ MenuGroup:AddButton({
 })
 
 Library.ToggleKeybind = Options.MenuKeybind
+
+-- mobile toggle button (only shows on mobile/tablet)
+if UserInputService.TouchEnabled then
+	local mobileToggle = Instance.new("ScreenGui")
+	mobileToggle.Name = "VisionHubMobileToggle"
+	mobileToggle.ResetOnSpawn = false
+	mobileToggle.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	mobileToggle.DisplayOrder = 999
+	mobileToggle.Parent = game:GetService("CoreGui")
+
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 44, 0, 44)
+	btn.Position = UDim2.new(0, 10, 0.5, -22)
+	btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	btn.BackgroundTransparency = 0.3
+	btn.BorderSizePixel = 0
+	btn.Text = "V"
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.TextSize = 18
+	btn.Font = Enum.Font.GothamBold
+	btn.Parent = mobileToggle
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 22)
+	corner.Parent = btn
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(80, 80, 80)
+	stroke.Thickness = 1
+	stroke.Parent = btn
+
+	local dragging = false
+	local dragStart, startPos
+
+	btn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = btn.Position
+		end
+	end)
+
+	btn.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch and dragging then
+			local delta = input.Position - dragStart
+			btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+
+	btn.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			if dragging then
+				local delta = input.Position - dragStart
+				if delta.Magnitude < 10 then
+					Library:ToggleMenu()
+				end
+			end
+			dragging = false
+		end
+	end)
+
+	Library:OnUnload(function()
+		mobileToggle:Destroy()
+	end)
+end
 
 -- ===== FUN EFFECTS LOGIC =====
 
@@ -1410,6 +1677,8 @@ Library:OnUnload(function()
 
 	if speedConn then speedConn:Disconnect() end
 	if dribbleConn then dribbleConn:Disconnect() end
+	if dribbleInputConn then dribbleInputConn:Disconnect() end
+	if lastDribbleTween then lastDribbleTween:Cancel() end
 	if spoofConn then spoofConn:Disconnect() end
 	stopSpeedBoost()
 	if espConn then espConn:Disconnect() end
@@ -1417,7 +1686,6 @@ Library:OnUnload(function()
 	if noclipConn then noclipConn:Disconnect() end
 	if bigHeadConn then bigHeadConn:Disconnect() end
 	if ballTracerConn then ballTracerConn:Disconnect() end
-	if agResult and agResult.cleanupUITrace then agResult.cleanupUITrace() end
 	if rainbowConn then rainbowConn:Disconnect() end
 	if selfHighlight then selfHighlight:Destroy() end
 	if ballTracerLine then ballTracerLine:Remove() end
