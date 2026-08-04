@@ -1379,59 +1379,111 @@ AnimLeft:AddLabel("⚠ These are server-sided and could")
 AnimLeft:AddLabel("get you banned by Practical mods.")
 
 local releaseAnimConn = nil
+local releaseActionConn = nil
 local currentReleaseTrack = nil
+local wasShootingForAnim = false
+
+local function findAnimator()
+	-- try the workspace.Characters model first
+	local char = getCharacterModel()
+	if char then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			local anim = hum:FindFirstChildOfClass("Animator")
+			if anim then return anim end
+		end
+		-- search deeper in case Animator is nested
+		for _, desc in char:GetDescendants() do
+			if desc:IsA("Animator") then return desc end
+		end
+	end
+	-- fallback: use the actual player character (Players.LocalPlayer.Character)
+	local plrChar = LocalPlayer.Character
+	if plrChar then
+		local hum = plrChar:FindFirstChildOfClass("Humanoid")
+		if hum then
+			local anim = hum:FindFirstChildOfClass("Animator")
+			if anim then return anim end
+		end
+	end
+	return nil
+end
+
+local function playReleaseAnimation()
+	local animName = Options.ReleaseAnimPick and Options.ReleaseAnimPick.Value or "Take the L"
+	local animId = RELEASE_ANIMS[animName]
+	if not animId then return end
+
+	local animator = findAnimator()
+	if not animator then
+		warn("[VisionHub] No Animator found for release animation")
+		return
+	end
+
+	if currentReleaseTrack and currentReleaseTrack.IsPlaying then
+		currentReleaseTrack:Stop(0.2)
+	end
+
+	local anim = Instance.new("Animation")
+	anim.AnimationId = "rbxassetid://" .. animId
+
+	local ok, track = pcall(function()
+		return animator:LoadAnimation(anim)
+	end)
+
+	if ok and track then
+		currentReleaseTrack = track
+		track.Priority = Enum.AnimationPriority.Action4
+		track:Play()
+		track.Stopped:Once(function()
+			currentReleaseTrack = nil
+			anim:Destroy()
+		end)
+		task.delay(5, function()
+			if track.IsPlaying then track:Stop(0.3) end
+		end)
+	else
+		warn("[VisionHub] Failed to load release animation:", animId)
+		anim:Destroy()
+	end
+end
 
 local function startReleaseAnimWatcher()
-	if releaseAnimConn then return end
+	if releaseActionConn then return end
 
+	-- Method 1: watch Action attribute change (works even without ShowFeedback)
+	releaseActionConn = RunService.Heartbeat:Connect(function()
+		if not (Toggles.ReleaseAnim and Toggles.ReleaseAnim.Value) then
+			wasShootingForAnim = false
+			return
+		end
+
+		local char = getCharacterModel()
+		if not char then wasShootingForAnim = false return end
+		local action = char:GetAttribute("Action") or ""
+		local isShooting = (action == "Shooting" or action == "Dunking")
+
+		if wasShootingForAnim and not isShooting then
+			task.delay(0.15, playReleaseAnimation)
+		end
+
+		wasShootingForAnim = isShooting
+	end)
+
+	-- Method 2: also try ShowFeedback as backup trigger
 	local InterfaceRemotes = AeroRemotes:FindFirstChild("InterfaceService")
 	if InterfaceRemotes then
 		local showFeedback = InterfaceRemotes:FindFirstChild("ShowFeedback")
 		if showFeedback then
 			releaseAnimConn = showFeedback.OnClientEvent:Connect(function(charModel, contestPct, timingIdx)
 				if not (Toggles.ReleaseAnim and Toggles.ReleaseAnim.Value) then return end
-
 				local myChar = getCharacterModel()
-				if not myChar or charModel ~= myChar then return end
-
-				local animName = Options.ReleaseAnimPick and Options.ReleaseAnimPick.Value or "Take the L"
-				local animId = RELEASE_ANIMS[animName]
-				if not animId then return end
-
-				task.delay(0.3, function()
-					local hum = myChar:FindFirstChildOfClass("Humanoid")
-					if not hum then return end
-					local animator = hum:FindFirstChildOfClass("Animator")
-					if not animator then return end
-
-					local anim = Instance.new("Animation")
-					anim.AnimationId = "rbxassetid://" .. animId
-
-					local ok, track = pcall(function()
-						return animator:LoadAnimation(anim)
-					end)
-
-					if ok and track then
-						currentReleaseTrack = track
-						track.Priority = Enum.AnimationPriority.Action4
-						track:Play()
-						track.Stopped:Once(function()
-							currentReleaseTrack = nil
-							anim:Destroy()
-						end)
-						task.delay(5, function()
-							if track.IsPlaying then track:Stop(0.3) end
-						end)
-					else
-						anim:Destroy()
-					end
-				end)
+				if not myChar then return end
+				if charModel == myChar or charModel.Name == LocalPlayer.Name then
+					task.delay(0.2, playReleaseAnimation)
+				end
 			end)
-		else
-			warn("[VisionHub] ShowFeedback remote not found — release animations unavailable")
 		end
-	else
-		warn("[VisionHub] InterfaceService remotes not found — release animations unavailable")
 	end
 end
 
@@ -1457,7 +1509,7 @@ AnimRight:AddLabel("Higher = more blatant")
 
 local antiContestConn = nil
 local antiContestActive = false
-local antiContestBP = nil
+local antiContestBaseY = nil
 
 local function startAntiContest()
 	if antiContestConn then return end
@@ -1465,13 +1517,8 @@ local function startAntiContest()
 
 	antiContestConn = RunService.Heartbeat:Connect(function()
 		if not (Toggles.AntiContest and Toggles.AntiContest.Value) then
-			if antiContestActive then
-				if antiContestBP then
-					antiContestBP:Destroy()
-					antiContestBP = nil
-				end
-				antiContestActive = false
-			end
+			antiContestActive = false
+			antiContestBaseY = nil
 			wasShooting = false
 			return
 		end
@@ -1484,31 +1531,40 @@ local function startAntiContest()
 		if isShooting and not wasShooting then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
 			if hrp then
-				local studs = Options.AntiContestStuds and Options.AntiContestStuds.Value or 5
+				antiContestBaseY = hrp.Position.Y
 				antiContestActive = true
-
-				if antiContestBP then antiContestBP:Destroy() end
-				antiContestBP = Instance.new("BodyPosition")
-				antiContestBP.Name = "VH_AntiContest"
-				antiContestBP.MaxForce = Vector3.new(0, 50000, 0)
-				antiContestBP.D = 1000
-				antiContestBP.P = 10000
-				antiContestBP.Position = hrp.Position + Vector3.new(0, studs, 0)
-				antiContestBP.Parent = hrp
 			end
 		elseif not isShooting and wasShooting then
-			if antiContestBP then
-				antiContestBP:Destroy()
-				antiContestBP = nil
-			end
 			antiContestActive = false
+			antiContestBaseY = nil
 		end
 
-		if isShooting and antiContestBP then
+		if isShooting and antiContestActive then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then
+			if hrp and antiContestBaseY then
 				local studs = Options.AntiContestStuds and Options.AntiContestStuds.Value or 5
-				antiContestBP.Position = Vector3.new(hrp.Position.X, antiContestBP.Position.Y, hrp.Position.Z)
+				local targetY = antiContestBaseY + studs
+				local currentY = hrp.Position.Y
+				if currentY < targetY then
+					hrp.CFrame = hrp.CFrame + Vector3.new(0, targetY - currentY, 0)
+				end
+
+				-- also push ProxyCharacter up if it exists
+				local proxy = workspace:FindFirstChild("ProxyCharacter")
+				if proxy then
+					local proxyBV = proxy:FindFirstChild("MovementVelocity")
+					if proxyBV and proxyBV:IsA("BodyVelocity") then
+						-- keep proxy at elevated position too
+					end
+					local alignPos = nil
+					for _, desc in proxy:GetDescendants() do
+						if desc:IsA("AlignPosition") then alignPos = desc break end
+					end
+					-- move proxy part up to match
+					if proxy:IsA("BasePart") and proxy.Position.Y < targetY then
+						proxy.CFrame = proxy.CFrame + Vector3.new(0, targetY - proxy.Position.Y, 0)
+					end
+				end
 			end
 		end
 
@@ -1518,12 +1574,108 @@ end
 
 local function stopAntiContest()
 	if antiContestConn then antiContestConn:Disconnect() antiContestConn = nil end
-	if antiContestBP then antiContestBP:Destroy() antiContestBP = nil end
 	antiContestActive = false
+	antiContestBaseY = nil
 end
 
 Toggles.AntiContest:OnChanged(function(v)
 	if v then startAntiContest() else stopAntiContest() end
+end)
+
+-- Contest Buffer: boost height when guarding (defending a shooter)
+AnimRight:AddDivider()
+
+AnimRight:AddToggle("ContestBuffer", {
+	Text = "Contest Buffer",
+	Default = false,
+	Tooltip = "Boosts you upward when guarding to contest shots better",
+})
+
+AnimRight:AddSlider("ContestBufferStuds", {
+	Text = "Buffer Height",
+	Default = 3,
+	Min = 1,
+	Max = 20,
+	Rounding = 0,
+	Suffix = " studs",
+})
+
+local contestBufferConn = nil
+local contestBufferActive = false
+local contestBufferBaseY = nil
+
+local function startContestBuffer()
+	if contestBufferConn then return end
+	local wasGuarding = false
+
+	contestBufferConn = RunService.Heartbeat:Connect(function()
+		if not (Toggles.ContestBuffer and Toggles.ContestBuffer.Value) then
+			contestBufferActive = false
+			contestBufferBaseY = nil
+			wasGuarding = false
+			return
+		end
+
+		local char = getCharacterModel()
+		if not char then return end
+		-- activate when holding L2 (left trigger) or right mouse button (guard inputs)
+		local isGuarding = false
+		local gamepads = UserInputService:GetConnectedGamepads()
+		for _, gp in gamepads do
+			local state = UserInputService:GetGamepadState(gp)
+			for _, input in state do
+				if input.KeyCode == Enum.KeyCode.ButtonL2 and input.Position.Z > 0.5 then
+					isGuarding = true
+					break
+				end
+			end
+			if isGuarding then break end
+		end
+		if not isGuarding then
+			isGuarding = UserInputService:IsKeyDown(Enum.KeyCode.F)
+				
+		end
+
+		if isGuarding and not wasGuarding then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				contestBufferBaseY = hrp.Position.Y
+				contestBufferActive = true
+			end
+		elseif not isGuarding and wasGuarding then
+			contestBufferActive = false
+			contestBufferBaseY = nil
+		end
+
+		if isGuarding and contestBufferActive then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp and contestBufferBaseY then
+				local studs = Options.ContestBufferStuds and Options.ContestBufferStuds.Value or 3
+				local targetY = contestBufferBaseY + studs
+				local currentY = hrp.Position.Y
+				if currentY < targetY then
+					hrp.CFrame = hrp.CFrame + Vector3.new(0, targetY - currentY, 0)
+				end
+
+				local proxy = workspace:FindFirstChild("ProxyCharacter")
+				if proxy and proxy:IsA("BasePart") and proxy.Position.Y < targetY then
+					proxy.CFrame = proxy.CFrame + Vector3.new(0, targetY - proxy.Position.Y, 0)
+				end
+			end
+		end
+
+		wasGuarding = isGuarding
+	end)
+end
+
+local function stopContestBuffer()
+	if contestBufferConn then contestBufferConn:Disconnect() contestBufferConn = nil end
+	contestBufferActive = false
+	contestBufferBaseY = nil
+end
+
+Toggles.ContestBuffer:OnChanged(function(v)
+	if v then startContestBuffer() else stopContestBuffer() end
 end)
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1935,7 +2087,9 @@ Library:OnUnload(function()
 	if spoofConn then spoofConn:Disconnect() end
 	stopSpeedBoost()
 	stopAntiContest()
+	stopContestBuffer()
 	if releaseAnimConn then releaseAnimConn:Disconnect() end
+	if releaseActionConn then releaseActionConn:Disconnect() end
 	if currentReleaseTrack and currentReleaseTrack.IsPlaying then currentReleaseTrack:Stop() end
 	if espConn then espConn:Disconnect() end
 	if otherNameConn then otherNameConn:Disconnect() end
