@@ -100,6 +100,7 @@ local Tabs = {
 	Character = Window:AddTab("Character", "zap"),
 	AutoGreen = Window:AddTab("Auto Green", "target"),
 	Visuals   = Window:AddTab("Visuals", "eye"),
+	Animations = Window:AddTab("Animations", "music"),
 	Misc      = Window:AddTab("Misc", "box"),
 	Settings  = Window:AddTab("Settings", "settings"),
 }
@@ -351,6 +352,13 @@ CharRight:AddSlider("SpeedBoostValue", {
 	Rounding = 1,
 })
 
+CharRight:AddDropdown("SpeedMethod", {
+	Values = {"Attribute", "CFrame"},
+	Default = 1,
+	Text = "Speed Method",
+	Tooltip = "Attribute = uses game SpeedBoost attrs, CFrame = teleports forward each frame (more blatant)",
+})
+
 CharRight:AddDivider()
 
 CharRight:AddToggle("DribbleExtender", {
@@ -425,7 +433,7 @@ local speedConn = nil
 
 local function startSpeedBoost()
 	if speedConn then return end
-	speedConn = RunService.Heartbeat:Connect(function()
+	speedConn = RunService.Heartbeat:Connect(function(dt)
 		if not (Toggles.SpeedBoost and Toggles.SpeedBoost.Value) then return end
 
 		local char = getCharacterModel()
@@ -433,15 +441,52 @@ local function startSpeedBoost()
 
 		local moving = isPlayerMoving()
 		local boostVal = Options.SpeedBoostValue and Options.SpeedBoostValue.Value or 3
+		local method = Options.SpeedMethod and Options.SpeedMethod.Value or "Attribute"
 
-		if moving then
-			char:SetAttribute("SpeedBoost", boostVal)
-			char:SetAttribute("AccelerationBoost", boostVal)
-			char:SetAttribute("SpeedBoostTime", 9999)
-		else
+		if method == "CFrame" then
 			char:SetAttribute("SpeedBoost", 0)
 			char:SetAttribute("AccelerationBoost", 0)
 			char:SetAttribute("SpeedBoostTime", 0)
+
+			if moving then
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local cam = workspace.CurrentCamera
+					local moveDir = Vector3.new(0, 0, 0)
+					local camCF = cam.CFrame
+
+					if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camCF.LookVector end
+					if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camCF.LookVector end
+					if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camCF.RightVector end
+					if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camCF.RightVector end
+
+					local gamepads = UserInputService:GetConnectedGamepads()
+					for _, gp in gamepads do
+						local state = UserInputService:GetGamepadState(gp)
+						for _, input in state do
+							if input.KeyCode == Enum.KeyCode.Thumbstick1 and input.Position.Magnitude > 0.2 then
+								moveDir = moveDir + camCF.LookVector * input.Position.Y + camCF.RightVector * input.Position.X
+							end
+						end
+					end
+
+					moveDir = Vector3.new(moveDir.X, 0, moveDir.Z)
+					if moveDir.Magnitude > 0.01 then
+						moveDir = moveDir.Unit
+						hrp.CFrame = hrp.CFrame + moveDir * boostVal * dt * 15
+					end
+				end
+			end
+		else
+			if moving then
+				char:SetAttribute("SpeedBoost", boostVal)
+				char:SetAttribute("AccelerationBoost", boostVal)
+				char:SetAttribute("SpeedBoostTime", 9999)
+			else
+				char:SetAttribute("SpeedBoost", 0)
+				char:SetAttribute("AccelerationBoost", 0)
+				char:SetAttribute("SpeedBoostTime", 0)
+			end
 		end
 	end)
 end
@@ -1292,6 +1337,196 @@ Toggles.BallTracer:OnChanged(function()
 end)
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- TAB: ANIMATIONS (Release Dances + Anti Contest)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+local AnimLeft  = Tabs.Animations:AddLeftGroupbox("Release Animations", "music")
+local AnimRight = Tabs.Animations:AddRightGroupbox("Anti Contest", "shield")
+
+AnimLeft:AddToggle("ReleaseAnim", {
+	Text = "Release Animation",
+	Default = false,
+	Tooltip = "Plays a dance animation after shooting the ball",
+})
+
+local RELEASE_ANIMS = {
+	["Take the L"] = "73593666217037",
+	["Fall Down"] = "71071272603907",
+	["Floss"] = "72174079036035",
+	["Worm"] = "77625642316480",
+	["Baby Boo"] = "122461225964217",
+	["Scuba"] = "133781849142726",
+	["Backflip"] = "78243540508781",
+	["Pop It"] = "112643042257327",
+	["Dih Hoppin"] = "87422352743712",
+	["Polish Cow"] = "106390793612351",
+	["Airplane"] = "128658410649756",
+}
+
+local releaseAnimNames = {}
+for name, _ in pairs(RELEASE_ANIMS) do
+	table.insert(releaseAnimNames, name)
+end
+table.sort(releaseAnimNames)
+
+AnimLeft:AddDropdown("ReleaseAnimPick", {
+	Values = releaseAnimNames,
+	Default = 1,
+	Text = "Animation",
+})
+
+AnimLeft:AddLabel("⚠ These are server-sided and could")
+AnimLeft:AddLabel("get you banned by Practical mods.")
+
+local releaseAnimConn = nil
+local currentReleaseTrack = nil
+
+local function startReleaseAnimWatcher()
+	if releaseAnimConn then return end
+
+	local InterfaceRemotes = AeroRemotes:FindFirstChild("InterfaceService")
+	if InterfaceRemotes then
+		local showFeedback = InterfaceRemotes:FindFirstChild("ShowFeedback")
+		if showFeedback then
+			releaseAnimConn = showFeedback.OnClientEvent:Connect(function(charModel, contestPct, timingIdx)
+				if not (Toggles.ReleaseAnim and Toggles.ReleaseAnim.Value) then return end
+
+				local myChar = getCharacterModel()
+				if not myChar or charModel ~= myChar then return end
+
+				local animName = Options.ReleaseAnimPick and Options.ReleaseAnimPick.Value or "Take the L"
+				local animId = RELEASE_ANIMS[animName]
+				if not animId then return end
+
+				task.delay(0.3, function()
+					local hum = myChar:FindFirstChildOfClass("Humanoid")
+					if not hum then return end
+					local animator = hum:FindFirstChildOfClass("Animator")
+					if not animator then return end
+
+					local anim = Instance.new("Animation")
+					anim.AnimationId = "rbxassetid://" .. animId
+
+					local ok, track = pcall(function()
+						return animator:LoadAnimation(anim)
+					end)
+
+					if ok and track then
+						currentReleaseTrack = track
+						track.Priority = Enum.AnimationPriority.Action4
+						track:Play()
+						track.Stopped:Once(function()
+							currentReleaseTrack = nil
+							anim:Destroy()
+						end)
+						task.delay(5, function()
+							if track.IsPlaying then track:Stop(0.3) end
+						end)
+					else
+						anim:Destroy()
+					end
+				end)
+			end)
+		else
+			warn("[VisionHub] ShowFeedback remote not found — release animations unavailable")
+		end
+	else
+		warn("[VisionHub] InterfaceService remotes not found — release animations unavailable")
+	end
+end
+
+startReleaseAnimWatcher()
+
+-- Anti Contest: boost player up when shooting/dunking
+AnimRight:AddToggle("AntiContest", {
+	Text = "Anti Contest",
+	Default = false,
+	Tooltip = "Boosts you upward when shooting or dunking to avoid contests",
+})
+
+AnimRight:AddSlider("AntiContestStuds", {
+	Text = "Boost Height",
+	Default = 5,
+	Min = 1,
+	Max = 30,
+	Rounding = 0,
+	Suffix = " studs",
+})
+
+AnimRight:AddLabel("Higher = more blatant")
+
+local antiContestConn = nil
+local antiContestActive = false
+local antiContestBP = nil
+
+local function startAntiContest()
+	if antiContestConn then return end
+	local wasShooting = false
+
+	antiContestConn = RunService.Heartbeat:Connect(function()
+		if not (Toggles.AntiContest and Toggles.AntiContest.Value) then
+			if antiContestActive then
+				if antiContestBP then
+					antiContestBP:Destroy()
+					antiContestBP = nil
+				end
+				antiContestActive = false
+			end
+			wasShooting = false
+			return
+		end
+
+		local char = getCharacterModel()
+		if not char then return end
+		local action = char:GetAttribute("Action") or ""
+		local isShooting = (action == "Shooting" or action == "Dunking")
+
+		if isShooting and not wasShooting then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local studs = Options.AntiContestStuds and Options.AntiContestStuds.Value or 5
+				antiContestActive = true
+
+				if antiContestBP then antiContestBP:Destroy() end
+				antiContestBP = Instance.new("BodyPosition")
+				antiContestBP.Name = "VH_AntiContest"
+				antiContestBP.MaxForce = Vector3.new(0, 50000, 0)
+				antiContestBP.D = 1000
+				antiContestBP.P = 10000
+				antiContestBP.Position = hrp.Position + Vector3.new(0, studs, 0)
+				antiContestBP.Parent = hrp
+			end
+		elseif not isShooting and wasShooting then
+			if antiContestBP then
+				antiContestBP:Destroy()
+				antiContestBP = nil
+			end
+			antiContestActive = false
+		end
+
+		if isShooting and antiContestBP then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local studs = Options.AntiContestStuds and Options.AntiContestStuds.Value or 5
+				antiContestBP.Position = Vector3.new(hrp.Position.X, antiContestBP.Position.Y, hrp.Position.Z)
+			end
+		end
+
+		wasShooting = isShooting
+	end)
+end
+
+local function stopAntiContest()
+	if antiContestConn then antiContestConn:Disconnect() antiContestConn = nil end
+	if antiContestBP then antiContestBP:Destroy() antiContestBP = nil end
+	antiContestActive = false
+end
+
+Toggles.AntiContest:OnChanged(function(v)
+	if v then startAntiContest() else stopAntiContest() end
+end)
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- TAB: MISC
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1699,6 +1934,9 @@ Library:OnUnload(function()
 	if lastDribbleTween then lastDribbleTween:Cancel() end
 	if spoofConn then spoofConn:Disconnect() end
 	stopSpeedBoost()
+	stopAntiContest()
+	if releaseAnimConn then releaseAnimConn:Disconnect() end
+	if currentReleaseTrack and currentReleaseTrack.IsPlaying then currentReleaseTrack:Stop() end
 	if espConn then espConn:Disconnect() end
 	if otherNameConn then otherNameConn:Disconnect() end
 	if noclipConn then noclipConn:Disconnect() end
