@@ -252,11 +252,10 @@ PlayerRight:AddDropdown("Hand", {
 	end,
 })
 
-PlayerRight:AddInput("TakeoverType", {
+PlayerRight:AddDropdown("TakeoverType", {
+	Values = {"Smooth Operator", "Knockdown Shooter", "Resolve", "Highlight Reel", "Downhill", "Unleash", "Rim Rocker"},
+	Default = 1,
 	Text = "Takeover Type",
-	Default = "",
-	Placeholder = "Fadeaway King",
-	Finished = true,
 	Callback = function(v)
 		local char = getCharacterModel()
 		if char then char:SetAttribute("TakeoverType", v) end
@@ -336,6 +335,14 @@ CharLeft:AddToggle("NeverCold", {
 CharLeft:AddToggle("MaxPower", {
 	Text = "Max Power",
 	Default = false,
+})
+
+CharLeft:AddDivider()
+
+CharLeft:AddToggle("AutoBlock", {
+	Text = "Auto Block",
+	Default = false,
+	Tooltip = "Automatically blocks when a nearby player is shooting or dunking at you",
 })
 
 CharRight:AddToggle("SpeedBoost", {
@@ -426,6 +433,56 @@ task.spawn(function()
 		end
 
 	end
+end)
+
+-- auto block: jump (block) when a nearby opponent is shooting/dunking at you
+local autoBlockConn = nil
+
+local function startAutoBlock()
+	if autoBlockConn then return end
+	autoBlockConn = RunService.Heartbeat:Connect(function()
+		if not (Toggles.AutoBlock and Toggles.AutoBlock.Value) then return end
+
+		local char = getCharacterModel()
+		if not char then return end
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+
+		local myAction = char:GetAttribute("Action") or ""
+		if myAction == "Shooting" or myAction == "Dunking" or myAction == "Dribbling" then return end
+
+		local shouldBlock = false
+		for _, model in getAllCharacterModels() do
+			if model ~= char then
+				local otherAction = model:GetAttribute("Action") or ""
+				if otherAction == "Shooting" or otherAction == "Dunking" then
+					local otherHRP = model:FindFirstChild("HumanoidRootPart")
+					if otherHRP then
+						local dist = (hrp.Position - otherHRP.Position).Magnitude
+						if dist < 15 then
+							shouldBlock = true
+							break
+						end
+					end
+				end
+			end
+		end
+
+		if shouldBlock then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if hum and hum:GetState() ~= Enum.HumanoidStateType.Jumping and hum:GetState() ~= Enum.HumanoidStateType.Freefall then
+				hum:ChangeState(Enum.HumanoidStateType.Jumping)
+			end
+		end
+	end)
+end
+
+local function stopAutoBlock()
+	if autoBlockConn then autoBlockConn:Disconnect() autoBlockConn = nil end
+end
+
+Toggles.AutoBlock:OnChanged(function(v)
+	if v then startAutoBlock() else stopAutoBlock() end
 end)
 
 -- permanent speed boost via game attributes (zeros when standing still)
@@ -1633,7 +1690,7 @@ local function startContestBuffer()
 		end
 		if not isGuarding then
 			isGuarding = UserInputService:IsKeyDown(Enum.KeyCode.F)
-				
+				or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
 		end
 
 		if isGuarding and not wasGuarding then
@@ -2086,6 +2143,7 @@ Library:OnUnload(function()
 	if lastDribbleTween then lastDribbleTween:Cancel() end
 	if spoofConn then spoofConn:Disconnect() end
 	stopSpeedBoost()
+	stopAutoBlock()
 	stopAntiContest()
 	stopContestBuffer()
 	if releaseAnimConn then releaseAnimConn:Disconnect() end
